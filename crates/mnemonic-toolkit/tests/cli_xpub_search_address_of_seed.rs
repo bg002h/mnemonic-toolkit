@@ -1314,3 +1314,327 @@ fn json_envelope_shape() {
     }
     assert!(s["candidate_scripts"].is_null(), "null in single-sig");
 }
+
+// ---------------------------------------------------------------------------
+// review r1 (design/agent-reports/address-of-seed-impl-review-r1.md)
+// ---------------------------------------------------------------------------
+
+/// The slot (0-based) whose key has this master fingerprint.
+fn slot_by_fp<'a>(w: &'a Value, fp: &str) -> &'a Value {
+    w["slots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["master_fingerprint"] == fp || s["stated_fingerprint"] == fp)
+        .unwrap_or_else(|| panic!("no slot with fingerprint {fp}: {w}"))
+}
+
+/// C1 (review r1): with `--refugium-seats` the seat is fixed by the slot, so
+/// a sorted template must not collapse slot orders. Z holds seat 0, A seat
+/// 1; the wallet is found whichever order the seeds are given in.
+#[test]
+fn c1_refugium_two_seats_found_in_either_seed_order() {
+    let z0 = key_with_use_site(Z, "m/270028'/0'/0'");
+    let a1 = key_with_use_site(A, "m/270028'/0'/1'");
+    for (tmpl, desc) in [
+        (SORTED.to_string(), format!("wsh(sortedmulti(2,{z0},{a1}))")),
+        (
+            "tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<0;1>/*))".to_string(),
+            format!("tr({NUMS},sortedmulti_a(2,{z0},{a1}))"),
+        ),
+        (UNSORTED.to_string(), format!("wsh(multi(2,{z0},{a1}))")),
+    ] {
+        let target = mint(&desc, 0, 0);
+        for order in [
+            ["phrase=@env:SEED_A", "phrase=@env:SEED_Z"],
+            ["phrase=@env:SEED_Z", "phrase=@env:SEED_A"],
+        ] {
+            let o = run_with(
+                &[
+                    "--from",
+                    order[0],
+                    "--from",
+                    order[1],
+                    "--descriptor",
+                    &tmpl,
+                    "--refugium-seats",
+                    "--target-address",
+                    &target,
+                    "--json",
+                ],
+                &envs(),
+                None,
+            );
+            let v = o.json();
+            assert_ne!(v["result"], "no_match", "{tmpl} {order:?}: {}", o.stderr);
+            let w = found(&v);
+            let z = slot_by_fp(w, "3f635a63");
+            let a = slot_by_fp(w, "73c5da0a");
+            assert_eq!(z["origin_path"], "m/270028'/0'/0'", "{tmpl} {order:?}: {w}");
+            assert_eq!(a["origin_path"], "m/270028'/0'/1'", "{tmpl} {order:?}: {w}");
+            assert_eq!(z["template"], "refugium-seat");
+            assert_eq!(z["refugium_seat"], 0);
+            assert_eq!(a["refugium_seat"], 1);
+        }
+    }
+}
+
+/// Mint a keyless template md1 with `bundle --md1-form template` (the test's
+/// own mint, as L1 and L2 mint their targets).
+fn mint_template_md1(descriptor: &str) -> Vec<String> {
+    let o = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            descriptor,
+            "--slot",
+            "@0.phrase=@env:SEED_A",
+            "--slot",
+            "@1.phrase=@env:SEED_Z",
+            "--md1-form",
+            "template",
+            "--json",
+        ])
+        .envs(envs())
+        .output()
+        .unwrap();
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    let v: Value = serde_json::from_slice(&o.stdout).unwrap();
+    v["md1"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c.as_str().unwrap().to_string())
+        .collect()
+}
+
+/// I1 (review r1): a keyless md1 recording a different origin per slot pins
+/// the path to the slot, not to a seed, so the sorted collapse is unsound
+/// there too. M4's wallet (A at m/48'/0'/0'/2' in @0, Z at m/87'/0'/2' in
+/// @1) is found with the seeds in either order.
+#[test]
+fn i1_keyless_md1_divergent_paths_either_seed_order() {
+    let md1 = mint_template_md1(
+        "wsh(sortedmulti(2,[73c5da0a/48h/0h/0h/2h]@0/<0;1>/*,[3f635a63/87h/0h/2h]@1/<0;1>/*))",
+    );
+    for order in [
+        ["phrase=@env:SEED_A", "phrase=@env:SEED_Z"],
+        ["phrase=@env:SEED_Z", "phrase=@env:SEED_A"],
+    ] {
+        let mut args: Vec<String> = vec![
+            "--from".into(),
+            order[0].into(),
+            "--from".into(),
+            order[1].into(),
+            "--target-address".into(),
+            M4.into(),
+            "--json".into(),
+        ];
+        for c in &md1 {
+            args.push("--descriptor-from".into());
+            args.push(format!("md1={c}"));
+        }
+        let a: Vec<&str> = args.iter().map(String::as_str).collect();
+        let o = run_with(&a, &envs(), None);
+        let v = o.json();
+        assert_ne!(v["result"], "no_match", "{order:?}: {}", o.stdout);
+        let w = found(&v);
+        assert_eq!(slot_by_fp(w, "73c5da0a")["origin_path"], "m/48'/0'/0'/2'");
+        assert_eq!(slot_by_fp(w, "3f635a63")["origin_path"], "m/87'/0'/2'");
+        assert_eq!(slot_by_fp(w, "73c5da0a")["template"], "md1");
+    }
+    // A no-match on the card's paths carries the template-as-text hint.
+    let mut args: Vec<String> = vec![
+        "--from".into(),
+        "phrase=@env:SEED_A".into(),
+        "--from".into(),
+        "phrase=@env:SEED_Z".into(),
+        "--target-address".into(),
+        M1.into(),
+    ];
+    for c in &md1 {
+        args.push("--descriptor-from".into());
+        args.push(format!("md1={c}"));
+    }
+    let a: Vec<&str> = args.iter().map(String::as_str).collect();
+    let o = run_with(&a, &envs(), None);
+    assert_eq!(o.code, 4, "{}", o.stderr);
+    assert!(
+        o.stdout.contains("the paths came from the md1 card"),
+        "{}",
+        o.stdout
+    );
+}
+
+/// I2 (review r1): `@0` beside a pasted cosigner xpub searches (the literal
+/// key becomes a placed cosigner slot); it never prints a false no-match.
+#[test]
+fn i2_template_mixing_at_n_with_a_literal_xpub_searches() {
+    let z = origin_key(Z, "m/48'/0'/0'/2'");
+    let o = run_a(&[
+        "--descriptor",
+        &format!("wsh(sortedmulti(2,@0/<0;1>/*,{z}/<0;1>/*))"),
+        "--target-address",
+        M1,
+        "--json",
+    ]);
+    let v = o.json();
+    assert_ne!(v["result"], "no_match", "{}\n{}", o.stdout, o.stderr);
+    let w = found(&v);
+    assert_eq!(slot_by_fp(w, "73c5da0a")["origin_path"], "m/48'/0'/0'/2'");
+    assert_eq!(slot_by_fp(w, "3f635a63")["source"], "cosigner");
+    assert!(reasons(&v).contains(&"twin".to_string()), "{v}");
+}
+
+/// I3 (review r1): a keyed descriptor with a valid BIP-380 checksum is
+/// accepted; a wrong checksum is refused against the text as given.
+#[test]
+fn i3_keyed_descriptor_with_checksum() {
+    let (_, ax) = xpub_at(A, "m/48'/0'/0'/2'");
+    let (_, zx) = xpub_at(Z, "m/48'/0'/0'/2'");
+    let bare = format!(
+        "wsh(multi(2,[73c5da0a/48h/0h/0h/2h]{ax}/<0;1>/*,[3f635a63/48h/0h/0h/2h]{zx}/<0;1>/*))"
+    );
+    let with_sum = Descriptor::<DescriptorPublicKey>::from_str(&bare)
+        .unwrap()
+        .to_string();
+    assert!(with_sum.contains('#'), "{with_sum}");
+    let o = run_a(&["--descriptor", &with_sum, "--target-address", M3, "--json"]);
+    assert_eq!(o.code, 0, "{}\n{}", o.stdout, o.stderr);
+    let (body, sum) = with_sum.rsplit_once('#').unwrap();
+    let bad = format!(
+        "{body}#{}",
+        if sum.starts_with('q') {
+            "pppppppp"
+        } else {
+            "qqqqqqqq"
+        }
+    );
+    let o = run_a(&["--descriptor", &bad, "--target-address", M3]);
+    assert_eq!(o.code, 2, "{}", o.stderr);
+    assert!(o.stderr.contains("checksum"), "{}", o.stderr);
+}
+
+/// Z's m/48'/0'/0'/2' key as mk1 chunks.
+fn z_mk1() -> Vec<String> {
+    let (fp, x) = xpub_at(Z, "m/48'/0'/0'/2'");
+    let card = mk_codec::KeyCard::new(
+        vec![[0u8; 4]],
+        Some(fp),
+        DerivationPath::from_str("m/48'/0'/0'/2'").unwrap(),
+        x,
+    );
+    mk_codec::encode(&card).unwrap()
+}
+
+/// I6 (review r1) and the §9 mk1 rows: an mk1 cosigner, placed (`@N=` per
+/// chunk) and unplaced (one `--cosigner` per chunk, grouped by chunk-set id).
+#[test]
+fn i6_mk1_cosigner_placed_and_unplaced_chunks() {
+    let chunks = z_mk1();
+    assert!(chunks.len() >= 2, "an xpub mk1 is multi-chunk");
+    // Unplaced: one value per chunk.
+    let mut args: Vec<String> = vec!["--descriptor".into(), UNSORTED.into()];
+    for c in &chunks {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    args.extend(["--target-address".into(), M3.into(), "--json".into()]);
+    let a: Vec<&str> = args.iter().map(String::as_str).collect();
+    let o = run_a(&a);
+    assert_eq!(o.code, 0, "{}\n{}", o.stdout, o.stderr);
+    let v = o.json();
+    let w = found(&v);
+    assert_eq!(w["slots"][1]["source"], "cosigner");
+    assert_eq!(w["slots"][1]["origin_path"], "m/48'/0'/0'/2'");
+    assert_eq!(w["slots"][1]["stated_fingerprint"], "3f635a63");
+    // Placed: `@1=` repeated per chunk.
+    let mut args: Vec<String> = vec!["--descriptor".into(), UNSORTED.into()];
+    for c in &chunks {
+        args.push("--cosigner".into());
+        args.push(format!("@1={c}"));
+    }
+    args.extend(["--target-address".into(), M3.into(), "--json".into()]);
+    let a: Vec<&str> = args.iter().map(String::as_str).collect();
+    let o = run_a(&a);
+    assert_eq!(o.code, 0, "{}\n{}", o.stdout, o.stderr);
+    // A chunk group that does not reassemble is refused.
+    let o = run_a(&[
+        "--descriptor",
+        UNSORTED,
+        "--cosigner",
+        &chunks[0],
+        "--target-address",
+        M3,
+    ]);
+    assert_eq!(o.code, 2, "{}", o.stderr);
+}
+
+/// Minor M1 (review r1): `reasons` is empty for `no_match` (SPEC §6).
+#[test]
+fn no_match_json_reasons_empty() {
+    let o = run_a(&["--target-address", S10, "--json"]);
+    assert_eq!(o.code, 4);
+    let v = o.json();
+    assert_eq!(v["result"], "no_match");
+    assert_eq!(v["reasons"], serde_json::json!([]));
+}
+
+/// Minor M2 (review r1): a match at `--add-path m` (the master key) cannot
+/// be put on a card: its path is printed, no command, exit 4.
+#[test]
+fn add_path_master_match_prints_no_command() {
+    let seed = Mnemonic::parse_in(bip39::Language::English, A)
+        .unwrap()
+        .to_seed("");
+    let master = Xpub::from_priv(
+        &Secp256k1::new(),
+        &Xpriv::new_master(NetworkKind::Main, &seed).unwrap(),
+    );
+    let target = mint(&format!("wpkh([73c5da0a]{master}/<0;1>/*)"), 0, 0);
+    let o = run_a(&["--target-address", &target, "--add-path", "m", "--json"]);
+    assert_eq!(o.code, 4, "{}\n{}", o.stdout, o.stderr);
+    let v = o.json();
+    let w = found(&v);
+    assert!(w["bundle_command"].is_null(), "{w}");
+    assert_eq!(w["bundle_command_unavailable"], "path_unrecordable");
+    assert_eq!(first_target_path(w, 0), "m/0/0");
+    assert!(reasons(&v).contains(&"path_unrecordable".to_string()));
+}
+
+/// Minor M3 (review r1): a positional ms1 on argv gets the argv advisory,
+/// on this verb and on path-of-xpub (the shared intake).
+#[test]
+fn positional_ms1_gets_the_argv_advisory() {
+    const A_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
+    let o = run_with(&[A_MS1, "--target-address", S1], &[], None);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert!(
+        o.stderr
+            .contains("secret material on argv (positional ms1)"),
+        "{}",
+        o.stderr
+    );
+    let (_, x) = xpub_at(A, "m/84'/0'/0'");
+    let o = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "xpub-search",
+            "path-of-xpub",
+            A_MS1,
+            "--target-xpub",
+            &x.to_string(),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("secret material on argv (positional ms1)"));
+}
