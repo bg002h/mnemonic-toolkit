@@ -804,4 +804,128 @@ mod tests {
         );
         assert!(s.contains("multi_a("), "leaf must be multi_a; got: {s}");
     }
+
+    // Review rulings2-r1 N-2: `tree_has_multiple_keys` counts DISTINCT `@N`
+    // across every body that carries keys.
+    mod tree_has_multiple_keys {
+        use super::super::tree_has_multiple_keys;
+        use md_codec::tag::Tag;
+        use md_codec::tree::{Body, InternalKey, Node};
+
+        fn pk(i: u8) -> Node {
+            Node {
+                tag: Tag::PkK,
+                body: Body::KeyArg { index: i },
+            }
+        }
+        fn node(tag: Tag, children: Vec<Node>) -> Node {
+            Node {
+                tag,
+                body: Body::Children(children),
+            }
+        }
+        fn multi(tag: Tag, k: u8, indices: Vec<u8>) -> Node {
+            Node {
+                tag,
+                body: Body::MultiKeys { k, indices },
+            }
+        }
+        fn tr(internal_key: InternalKey, tree: Option<Node>) -> Node {
+            Node {
+                tag: Tag::Tr,
+                body: Body::Tr {
+                    internal_key,
+                    tree: tree.map(Box::new),
+                },
+            }
+        }
+        fn older() -> Node {
+            Node {
+                tag: Tag::Older,
+                body: Body::Timelock(144),
+            }
+        }
+
+        #[test]
+        fn repeated_index_counts_once() {
+            let t = node(
+                Tag::Wsh,
+                vec![node(
+                    Tag::OrD,
+                    vec![pk(0), node(Tag::AndV, vec![pk(0), older()])],
+                )],
+            );
+            assert!(!tree_has_multiple_keys(&t));
+            let t = node(
+                Tag::Wsh,
+                vec![node(
+                    Tag::OrD,
+                    vec![pk(0), node(Tag::AndV, vec![pk(1), older()])],
+                )],
+            );
+            assert!(tree_has_multiple_keys(&t));
+        }
+
+        #[test]
+        fn multi_lists_count_distinct_indices() {
+            for tag in [Tag::Multi, Tag::SortedMulti, Tag::MultiA, Tag::SortedMultiA] {
+                assert!(!tree_has_multiple_keys(&node(
+                    Tag::Wsh,
+                    vec![multi(tag, 1, vec![0])]
+                )));
+                assert!(!tree_has_multiple_keys(&node(
+                    Tag::Wsh,
+                    vec![multi(tag, 1, vec![0, 0])]
+                )));
+                assert!(tree_has_multiple_keys(&node(
+                    Tag::Wsh,
+                    vec![multi(tag, 1, vec![0, 1])]
+                )));
+            }
+        }
+
+        #[test]
+        fn unspendable_internal_keys_are_not_keys() {
+            for ik in [InternalKey::NumsPoint, InternalKey::LianaUnspendable] {
+                assert!(!tree_has_multiple_keys(&tr(ik, Some(pk(0)))));
+                assert!(!tree_has_multiple_keys(&tr(
+                    ik,
+                    Some(multi(Tag::MultiA, 1, vec![0]))
+                )));
+                assert!(tree_has_multiple_keys(&tr(
+                    ik,
+                    Some(node(Tag::TapTree, vec![pk(0), pk(1)]))
+                )));
+            }
+        }
+
+        #[test]
+        fn slot_internal_key_counts_and_a_same_index_leaf_does_not_add() {
+            assert!(!tree_has_multiple_keys(&tr(InternalKey::Slot(0), None)));
+            assert!(!tree_has_multiple_keys(&tr(
+                InternalKey::Slot(0),
+                Some(pk(0))
+            )));
+            assert!(tree_has_multiple_keys(&tr(
+                InternalKey::Slot(0),
+                Some(pk(1))
+            )));
+        }
+
+        #[test]
+        fn thresh_counts_keys_not_fragments() {
+            let thresh = |k: u8, children: Vec<Node>| Node {
+                tag: Tag::Thresh,
+                body: Body::Variable { k, children },
+            };
+            assert!(!tree_has_multiple_keys(&node(
+                Tag::Wsh,
+                vec![thresh(2, vec![pk(0), older(), older()])]
+            )));
+            assert!(tree_has_multiple_keys(&node(
+                Tag::Wsh,
+                vec![thresh(1, vec![pk(0), pk(1)])]
+            )));
+        }
+    }
 }

@@ -4627,7 +4627,7 @@ Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `lite
 
 #### v0.19.0 silent-default-path inference
 
-Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger the same default path as `mnemonic bundle` (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`; `xpub-search` records no origin, so it keeps these defaults even for the single-key shapes `bundle` refuses) + a stderr `info:` notice naming the path (`info: non-canonical descriptor; defaulting origin path for @0,@1 to m/87'/0'/0' (BIP-87). …`). Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
+Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger the same default path as `mnemonic bundle` (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`; `xpub-search` records no origin, so it keeps these defaults even for the single-key shapes `bundle` refuses) + a stderr `info:` notice naming the path (`info: non-canonical descriptor; defaulting origin path for @0,@1 to m/87'/0'/0' (BIP-87). …`). The notice is printed only for a descriptor with two or more distinct keys; a one-key descriptor is no multisig, so no multisig hierarchy is named for it (the search is the same). Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
 
 #### NUMS sentinel
 

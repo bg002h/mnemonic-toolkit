@@ -1364,3 +1364,40 @@ fn bip48_scope_two_key_canonical_multi_keeps_the_fill() {
         o.stderr
     );
 }
+
+/// rulings2-r1 N-4: xpub-search names no multisig default for a descriptor
+/// with one key (the search itself is unchanged and still finds the key).
+#[test]
+fn xpub_search_prints_no_multisig_default_notice_for_one_key() {
+    let a = format!("{}/<0;1>/*", xpub_at(A, "m/84'/0'/0'"));
+    for desc in [
+        format!("wsh(and_v(v:pk({a}),older(144)))"),
+        format!("wsh(or_d(pk({a}),and_v(v:pk({a}),older(144))))"),
+    ] {
+        let o = run_stdin(
+            &[
+                "xpub-search",
+                "account-of-descriptor",
+                "--phrase-stdin",
+                "--descriptor",
+                &desc,
+                "--min-account",
+                "0",
+                "--number-of-accounts",
+                "1",
+            ],
+            A,
+        );
+        assert!(
+            !o.stderr.contains("defaulting origin path"),
+            "{desc}: {}",
+            o.stderr
+        );
+        assert!(
+            o.stdout.contains("m/84'/0'/0'"),
+            "{desc}: {}{}",
+            o.stdout,
+            o.stderr
+        );
+    }
+}
