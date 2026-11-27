@@ -387,6 +387,35 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
+    // Review r1 M3 of the echo/stdin fix: the checks above count only the
+    // `-` spelling. A path flag naming stdin (`/dev/stdin`, `/dev/fd/0`) is
+    // a reader too, so count every stdin reader once more by path.
+    {
+        let is_stdin =
+            |p: &std::path::Path| p.as_os_str() == "-" || crate::passphrase_input::path_is_stdin(p);
+        let mut readers: Vec<(bool, &str)> = Vec::new();
+        for t in &args.bsms_encryption_token {
+            readers.push((is_stdin(t), "--bsms-encryption-token"));
+        }
+        if let Some(b) = &args.blob {
+            readers.push((is_stdin(b), "--blob"));
+        }
+        for r in &args.bsms_round1 {
+            readers.push((is_stdin(r), "--bsms-round1"));
+        }
+        readers.push((
+            crate::passphrase_input::reads_stdin(
+                args.decrypt_password.as_deref(),
+                args.decrypt_password_stdin,
+            ) || args
+                .decrypt_password_file
+                .as_deref()
+                .is_some_and(crate::passphrase_input::path_is_stdin),
+            pw_spelling,
+        ));
+        crate::passphrase_input::refuse_second_stdin(&readers)?;
+    }
+
     // v0.32.2 — gap-h guard (R0 I1): per-Signer tokens (N>1) require N
     // matching `--bsms-round1` records. With zero records, the positional
     // count check in `verify_bsms_round1_files` would never fire, so guard

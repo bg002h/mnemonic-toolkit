@@ -997,18 +997,20 @@ impl ToolkitError {
             ToolkitError::SlotInputViolation { message, .. } => message.clone(),
             ToolkitError::TemplateFormUnsupportedShape { message } => message.clone(),
             ToolkitError::UnknownHrp { got, expected_one_of } => {
-                // v0.53.3 (audit M11 rider): truncate the echo to the FIRST
-                // 12 chars + `…` (only when longer) — a near-miss secret-ish
-                // positional must never appear in full on stderr.
-                let shown = if got.chars().count() > 12 {
-                    let head: String = got.chars().take(12).collect();
-                    format!("{head}…")
-                } else {
-                    got.clone()
+                // Review r1 M1: name only the prefix before the last `1`, and
+                // only when `hrp_is_echoable` allows it. The positional may be
+                // a secret (a phrase, a hex seed, or a card whose payload
+                // follows the separator), so no payload character is shown.
+                let lower = got.to_lowercase();
+                let shown = match lower.rfind('1').map(|i| &lower[..i]) {
+                    Some(h) if crate::repair::hrp_is_echoable(h) => {
+                        format!("positional argument beginning '{h}1'")
+                    }
+                    _ => "positional argument (input withheld)".to_string(),
                 };
                 format!(
-                    "positional argument '{shown}' does not begin with a recognized \
-                     HRP prefix (expected one of: {})",
+                    "{shown} does not begin with a recognized HRP prefix \
+                     (expected one of: {})",
                     expected_one_of.join(", ")
                 )
             }

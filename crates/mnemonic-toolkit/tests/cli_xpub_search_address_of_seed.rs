@@ -1939,7 +1939,7 @@ fn second_stdin_reader_via_descriptor_file_dev_stdin() {
         );
         assert_eq!(o.code, 2, "{path}: {}", o.stderr);
         assert!(
-            o.stderr.contains("--descriptor-file") && o.stderr.contains("stdin"),
+            o.stderr.contains("--descriptor-file /dev/stdin"),
             "{path}: {}",
             o.stderr
         );
@@ -1952,12 +1952,17 @@ fn second_stdin_reader_via_descriptor_file_dev_stdin() {
 fn ms1_slot_holding_a_phrase_is_not_echoed() {
     for (args, stdin) in [
         (vec!["--ms1-stdin", "--target-address", S1], Some(A)),
-        (vec!["--ms1", "@env:SEED_A", "--target-address", S1], None),
+        (
+            vec!["--allow-argv-secret", "--ms1", A, "--target-address", S1],
+            None,
+        ),
     ] {
         let o = run_with(&args, &envs(), stdin);
         assert_ne!(o.code, 0, "{}", o.stderr);
         assert!(!o.stderr.contains("abandon"), "{}", o.stderr);
         assert!(!o.stdout.contains("abandon"), "{}", o.stdout);
+        // The refusal is the HRP check, not some earlier gate (review r1 N2).
+        assert!(o.stderr.contains("withheld"), "{}", o.stderr);
     }
 }
 

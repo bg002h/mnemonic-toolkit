@@ -17,8 +17,8 @@
 //!     card (exit 0, kind: ms1) with NO full-string echo as an error
 //!   - verify-bundle uppercase positionals round-trip (uppercase ms1 now
 //!     `ms1_decode: ok`)
-//!   - decision-2 RIDER: UnknownHrp Display truncates `got` to its first 12
-//!     chars + `…` so a near-miss secret-ish positional never echoes in full
+//!   - decision-2 RIDER: UnknownHrp Display names at most the HRP prefix, so a
+//!     near-miss secret-ish positional never echoes its payload
 //!   - silent-payment --secret <UPPER ms1> → derives the SAME address as the
 //!     lowercase twin (correctness pin)
 //!   - ms-shares combine --share <UPPER secret-at-S> → REFUSED (the 0.4.2
@@ -613,15 +613,15 @@ fn inspect_mixed_case_md1_rejected() {
 // decision-2 RIDER — UnknownHrp echo truncation
 // ============================================================================
 
-/// A LONG unknown-HRP positional (51-char `xs1…`, secret-shaped) must NOT be
-/// echoed in full by `UnknownHrp`'s Display: only the first 12 chars + `…`
-/// appear, alongside the existing "does not begin with a recognized HRP
-/// prefix" prose. (Pre-fix, error.rs formatted the full `{got}` — a
-/// near-miss secret-ish positional leaked verbatim to stderr.)
+/// A LONG unknown-HRP positional (51-char `xs1…`, secret-shaped) must NOT
+/// have its payload echoed by `UnknownHrp`'s Display: only the `xs1` prefix
+/// is named, alongside the "does not begin with a recognized HRP prefix"
+/// prose. A positional with no echoable prefix (a pasted phrase) is withheld
+/// entirely. (The v0.53.3 rider showed the first 12 chars, which is 9
+/// payload characters; review r1 M1 of the echo fix.)
 #[test]
 fn unknown_hrp_long_positional_echo_truncated() {
     let long = format!("xs1{}", "q".repeat(48)); // 51 chars, secret-shaped
-    let truncated_head: String = long.chars().take(12).collect();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -630,15 +630,28 @@ fn unknown_hrp_long_positional_echo_truncated() {
         .code(2);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
-        !stderr.contains(&long),
-        "the full unknown-HRP string must not be echoed; got stderr: {stderr}"
+        !stderr.contains("xs1q"),
+        "no payload character may be echoed; got stderr: {stderr}"
     );
     assert!(
-        stderr.contains(&format!("{truncated_head}…")),
-        "expected the truncated head + ellipsis ({truncated_head}…); got stderr: {stderr}"
+        stderr.contains("beginning 'xs1'"),
+        "the HRP prefix is still named; got stderr: {stderr}"
     );
     assert!(
         stderr.contains("does not begin with a recognized HRP prefix"),
         "UnknownHrp prose must be preserved; got stderr: {stderr}"
+    );
+    let phrase = "abandon abandon abandon abandon abandon abandon abandon \
+                  abandon abandon abandon abandon about";
+    let assert = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args(["repair", phrase])
+        .assert()
+        .code(2);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("aband") && stderr.contains("input withheld"),
+        "a pasted phrase is withheld; got stderr: {stderr}"
     );
 }

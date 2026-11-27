@@ -128,11 +128,15 @@ pub(crate) fn classify_hrp_prefix(s: &str) -> Result<CardKind, ToolkitError> {
 /// Bitcoin address HRPs. Any other prefix is withheld from the message.
 const ECHOABLE_HRPS: &[&str] = &["ms", "mk", "md", "mt", "mr", "bc", "tb", "bcrt"];
 
-/// May an error message name this found HRP? Only a known HRP or a one-letter
-/// typo of a card HRP; anything else may be the start of a secret typed into
-/// the wrong field, so it is withheld.
+/// May an error message name this found HRP? Only a known HRP, or exactly two
+/// ASCII letters (the shape of a mistyped card HRP, such as `mq` or `xs`);
+/// anything else may be the start of a secret typed into the wrong field, so
+/// it is withheld. Every HRP diagnostic uses this one rule. No BIP-39 word
+/// has fewer than three letters, so a two-letter prefix is never a word of
+/// a pasted phrase.
 pub(crate) fn hrp_is_echoable(found: &str) -> bool {
-    ECHOABLE_HRPS.contains(&found) || suggest_hrp(found).is_some()
+    ECHOABLE_HRPS.contains(&found)
+        || (found.len() == 2 && found.bytes().all(|b| b.is_ascii_alphabetic()))
 }
 
 /// v0.24.0 §2.C.1 (D34/I5 fold) — per-flag HRP validation. Used by
@@ -199,7 +203,7 @@ pub(crate) fn validate_flag_hrp(
     // is the separator) from the lowercased value for a clean error message
     // (lowercasing keeps `--ms1 MK1xxx` reading "expected 'ms', got 'mk'").
     //
-    // The prefix is echoed ONLY when it is a known card or address HRP: the
+    // The prefix is echoed ONLY when `hrp_is_echoable` allows it: the
     // value is often a secret typed into the wrong field (a BIP-39 phrase
     // pasted into `--ms1` has no `1`, so the whole phrase used to be echoed,
     // even when it arrived on stdin). Anything else is withheld (`got` empty).
@@ -207,7 +211,7 @@ pub(crate) fn validate_flag_hrp(
     let got_hrp = lower
         .rfind('1')
         .map(|i| lower[..i].to_string())
-        .filter(|h| ECHOABLE_HRPS.contains(&h.as_str()))
+        .filter(|h| hrp_is_echoable(h))
         .unwrap_or_default();
     Err(ToolkitError::HrpMismatch {
         flag,
@@ -643,9 +647,9 @@ impl std::fmt::Display for RepairError {
                 let suggestion_suffix = suggestion
                     .map(|s| format!("; did you mean '{s}'?"))
                     .unwrap_or_default();
-                // Name the found prefix only when it is a known HRP or a
-                // one-letter typo of one: the chunk may be a secret typed
-                // into the wrong field, and anything else is withheld.
+                // Name the found prefix only when `hrp_is_echoable` allows
+                // it: the chunk may be a secret typed into the wrong field,
+                // and anything else is withheld.
                 let shown = if hrp_is_echoable(found) {
                     format!("found '{found}'")
                 } else {
@@ -3319,14 +3323,9 @@ mod tests {
         }
     }
 
-    /// Regression (ms-codec 0.4.4 pin bump): the `found` HRP that
-    /// `repair_via_ms_codec` surfaces from a long no-`'1'` chunk is BOUNDED
-    /// (ms-codec caps `WrongHrp.got` to 4 chars at construction so the error
-    /// can't echo a long secret prefix into logs/output). A pre-0.4.4 codec
-    /// echoed the whole input here. The toolkit inherits the cap for free.
     /// Review (address-of-seed GUI measurement, fable M1): a value typed
     /// into an ms1 field that is not an ms1 card is withheld from the
-    /// HrpMismatch message; a known HRP or a one-letter typo is still named.
+    /// HrpMismatch message; a known HRP or a two-letter typo is still named.
     #[test]
     fn hrp_mismatch_withholds_a_secret_typed_into_the_ms1_field() {
         let phrase = "abandon abandon abandon abandon abandon abandon abandon \
@@ -3343,14 +3342,17 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(m.contains("got 'mk'"), "{m}");
-        for found in ["7f", "aban", "secretword"] {
+        for found in ["7f", "aban", "secretword", "s", ""] {
             let m = RepairError::HrpMismatch {
                 chunk_index: 0,
                 expected: "ms",
                 found: found.into(),
             }
             .to_string();
-            assert!(!m.contains(found) && m.contains("input withheld"), "{m}");
+            assert!(
+                !m.contains(&format!("found '{found}'")) && m.contains("input withheld"),
+                "{m}"
+            );
         }
         let m = RepairError::HrpMismatch {
             chunk_index: 0,
@@ -3362,8 +3364,29 @@ mod tests {
             m.contains("found 'ns'") && m.contains("did you mean 'ms'"),
             "{m}"
         );
+        // A two-letter typo with no single nearest card HRP is still named,
+        // without a suggestion (review r1 M2).
+        let m = validate_flag_hrp("--ms1", "ms", "mq1qqqq")
+            .unwrap_err()
+            .to_string();
+        assert!(m.contains("got 'mq'"), "{m}");
+        let m = RepairError::HrpMismatch {
+            chunk_index: 0,
+            expected: "ms",
+            found: "mq".into(),
+        }
+        .to_string();
+        assert!(
+            m.contains("found 'mq'") && !m.contains("did you mean"),
+            "{m}"
+        );
     }
 
+    /// Regression (ms-codec 0.4.4 pin bump): the `found` HRP that
+    /// `repair_via_ms_codec` surfaces from a long no-`'1'` chunk is BOUNDED
+    /// (ms-codec caps `WrongHrp.got` to 4 chars at construction so the error
+    /// can't echo a long secret prefix into logs/output). A pre-0.4.4 codec
+    /// echoed the whole input here. The toolkit inherits the cap for free.
     #[test]
     fn repair_via_ms_codec_wrong_hrp_found_is_bounded() {
         // 8 codex32-alphabet chars, no `'1'` → ms-codec WrongHrp{got: "qpzr"}.

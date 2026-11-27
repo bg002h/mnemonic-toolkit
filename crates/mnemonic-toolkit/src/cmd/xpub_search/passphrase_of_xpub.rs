@@ -299,6 +299,15 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
             crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin),
             crate::passphrase_input::stdin_spelling(args.passphrase_stdin),
         ),
+        // A candidates file that IS stdin is a third reader (review r1 M3 of
+        // the echo/stdin fix): with `--phrase-stdin` it would scan an empty
+        // list, or the seed read would drain the candidates.
+        (
+            args.passphrase_candidates_file
+                .as_deref()
+                .is_some_and(crate::passphrase_input::path_is_stdin),
+            "--passphrase-candidates-file /dev/stdin",
+        ),
     ])?;
     // 1) Resolve seed (mutex + parse + ms1 auto-fire attempt). Cycle F: a
     //    touched ms1 correction no longer short-circuits here — it falls
