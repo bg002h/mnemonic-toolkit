@@ -58,6 +58,59 @@ pub fn check_account_window(
     Ok(())
 }
 
+/// Refuse an `--add-path` that names no path (final review I1): a template
+/// that does not parse is refused at intake (exit 2, naming the value),
+/// never skipped and then reported as searched. Hardened steps take `'` or
+/// `h`, as everywhere the toolkit parses a path (`DerivationPath::from_str`);
+/// `H`, a typographic quote and a trailing slash are refused. A template with
+/// an `account` token is checked at both ends of the window `[lo, hi)`: the
+/// substituted step grows with the account, so a template valid at both ends
+/// is valid throughout. `verb` names the subcommand in the message.
+pub fn check_add_paths(
+    verb: &str,
+    min_account: u32,
+    number_of_accounts: u32,
+    max_account: Option<u32>,
+    add_paths: &[String],
+) -> Result<(), ToolkitError> {
+    let (lo, hi) = window(min_account, number_of_accounts, max_account);
+    let bad = |tmpl: &str, why: String| {
+        ToolkitError::XpubSearchRefusal(format!(
+            "{verb}: --add-path `{tmpl}` is not a derivation path ({why}); write it as \
+             m/<step>/<step>..., hardened steps with ' or h (e.g. m/0' or m/0h)"
+        ))
+    };
+    for tmpl in add_paths {
+        if tmpl.trim().is_empty() {
+            return Err(bad(tmpl, "it is empty".into()));
+        }
+        match add_path_shape(tmpl) {
+            AddPathShape::Literal => {
+                DerivationPath::from_str(tmpl).map_err(|e| bad(tmpl, e.to_string()))?;
+            }
+            AddPathShape::Token { head, tail, quote } => {
+                if lo >= hi {
+                    continue;
+                }
+                for a in [lo, hi - 1] {
+                    DerivationPath::from_str(&substitute(&head, &tail, quote, a))
+                        .map_err(|e| bad(tmpl, format!("at account {a}: {e}")))?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn window(min_account: u32, number_of_accounts: u32, max_account: Option<u32>) -> (u32, u32) {
+    let from_n = min_account.saturating_add(number_of_accounts);
+    let hi = match max_account {
+        Some(m) => from_n.max(m.saturating_add(1)),
+        None => from_n,
+    };
+    (min_account, hi)
+}
+
 /// The deterministic candidate set per plan §3.2 step 4, generated lazily by
 /// [`CandidatePaths::iter`] (memory is constant in the window size).
 #[derive(Debug, Clone)]
@@ -227,7 +280,8 @@ impl CandidatePaths {
 
 /// Build the deterministic candidate set per plan §3.2 step 4 (lazily; see
 /// [`CandidatePaths`]). Infallible; precondition: the caller ran
-/// [`check_account_window`].
+/// [`check_account_window`] and [`check_add_paths`] (a malformed template
+/// is otherwise skipped here).
 ///
 /// - `min_account`: lower bound (inclusive).
 /// - `number_of_accounts`: window size (default 20).
@@ -242,14 +296,7 @@ pub fn build_candidate_paths(
     add_paths: &[String],
     network: CliNetwork,
 ) -> CandidatePaths {
-    let lo = min_account;
-    let hi = {
-        let from_n = min_account.saturating_add(number_of_accounts);
-        match max_account {
-            Some(m) => from_n.max(m.saturating_add(1)),
-            None => from_n,
-        }
-    };
+    let (lo, hi) = window(min_account, number_of_accounts, max_account);
     CandidatePaths {
         lo,
         hi,
@@ -404,6 +451,44 @@ mod tests {
             assert_eq!(cp.account, Some(i as u32));
             assert_eq!(cp.path.to_string(), format!("44'/0'/{i}'"));
         }
+    }
+
+    #[test]
+    fn check_add_paths_refuses_what_names_no_path() {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<String>>();
+        for ok in [
+            "m/0'",
+            "m/0h",
+            "0'",
+            "m",
+            "m/88'/0'/account'",
+            "m/9'/account",
+            "m/1account'",
+        ] {
+            assert!(
+                check_add_paths("path-of-xpub", 0, 20, None, &s(&[ok])).is_ok(),
+                "{ok}"
+            );
+        }
+        for bad in [
+            "m/0\u{2019}",
+            "m/0H",
+            "m/0'/",
+            "",
+            "garbage",
+            "m/account\u{2019}",
+        ] {
+            let e = check_add_paths("path-of-xpub", 0, 20, None, &s(&[bad])).unwrap_err();
+            assert!(matches!(e, ToolkitError::XpubSearchRefusal(_)), "{bad}");
+            assert!(
+                e.to_string().starts_with(&format!(
+                    "error: xpub-search path-of-xpub: --add-path `{bad}`"
+                )),
+                "{e}"
+            );
+        }
+        // Valid at the window's low end, not at its high end.
+        assert!(check_add_paths("v", 2147483646, 2, None, &s(&["m/1account'"])).is_err());
     }
 
     #[test]

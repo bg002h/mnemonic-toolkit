@@ -95,8 +95,12 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
             )
         }
         ms_codec::Error::Codex32(c) => format!("ms1 codex32: {:?}", c),
-        ms_codec::Error::WrongHrp { got } => {
+        ms_codec::Error::WrongHrp { got } if crate::repair::hrp_is_echoable(got) => {
             format!("ms1 wrong HRP: got {:?}, expected \"ms\"", got)
+        }
+        ms_codec::Error::WrongHrp { .. } => {
+            "ms1 wrong HRP: expected \"ms\"; the value does not start with \"ms1\" (input withheld)"
+                .to_string()
         }
         ms_codec::Error::ThresholdNotZero { got } => format!(
             "ms1 threshold not 0 (got '{}'); v0.1 single-string only",
@@ -175,7 +179,16 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
 pub fn friendly_mk_codec(e: &mk_codec::Error) -> String {
     use mk_codec::Error as E;
     match e {
-        E::InvalidHrp(s) => format!("mk1 wrong HRP: got {:?}, expected \"mk\"", s),
+        // mk-codec puts the whole lowercased input here when it has no `1`, so
+        // the value is named only when `hrp_is_echoable` allows it (a secret
+        // pasted into an mk1 field must not be echoed; review r1 I1).
+        E::InvalidHrp(s) if crate::repair::hrp_is_echoable(s) => {
+            format!("mk1 wrong HRP: got {:?}, expected \"mk\"", s)
+        }
+        E::InvalidHrp(_) => {
+            "mk1 wrong HRP: expected \"mk\"; the value does not start with \"mk1\" (input withheld)"
+                .to_string()
+        }
         E::MixedCase => "mk1 mixed case in input string".to_string(),
         E::InvalidStringLength(n) => format!(
             "mk1 data-part length {} not valid (regular code: 14-93; long code: 95-108; the gap at 94 is reserved-invalid)",
@@ -527,10 +540,38 @@ mod tests {
     }
 
     #[test]
+    fn ms_codec_wrong_hrp_withholds_a_non_hrp_prefix() {
+        let m = friendly_ms_codec(&ms_codec::Error::WrongHrp { got: "aban".into() });
+        assert!(!m.contains("aban"), "{m}");
+        assert!(m.contains("input withheld"), "{m}");
+    }
+
+    #[test]
     fn ms_codec_wrong_hrp() {
         let m = friendly_ms_codec(&ms_codec::Error::WrongHrp { got: "mq".into() });
         assert!(m.contains("ms1"));
         assert!(m.contains("\"ms\""));
+        assert!(m.contains("got \"mq\""), "a two-letter typo is named: {m}");
+    }
+
+    /// Review r1 N3: a real card HRP in the wrong field is still named.
+    #[test]
+    fn ms_codec_wrong_hrp_names_a_real_hrp() {
+        let m = friendly_ms_codec(&ms_codec::Error::WrongHrp { got: "md".into() });
+        assert!(m.contains("got \"md\""), "{m}");
+        assert!(!m.contains("withheld"), "{m}");
+    }
+
+    /// Review r1 I1: mk-codec's InvalidHrp carries the whole input when it
+    /// has no `1`; a phrase pasted into an mk1 field is withheld.
+    #[test]
+    fn mk_codec_invalid_hrp_withholds_a_non_hrp_value() {
+        let m = friendly_mk_codec(&mk_codec::Error::InvalidHrp(
+            "abandon abandon abandon about".into(),
+        ));
+        assert!(!m.contains("aband") && m.contains("input withheld"), "{m}");
+        let m = friendly_mk_codec(&mk_codec::Error::InvalidHrp("ms".into()));
+        assert!(m.contains("got \"ms\""), "{m}");
     }
 
     #[test]

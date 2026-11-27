@@ -98,7 +98,7 @@ refused. A value whose node (`--from`, `--share`) or `@N.<subkey>` (`--slot`) is
 
 The same rule holds on every subcommand that takes `--passphrase`
 (`addresses`, `restore`, `derive-child`, `bundle`, `verify-bundle`,
-`convert`, `silent-payment`, `slip39 split` / `combine`, and the three
+`convert`, `silent-payment`, `slip39 split` / `combine`, and the seed-taking
 `xpub-search` modes), and in `ms derive`. The same rule, with its own flag
 names, holds for `convert --bip38-passphrase` / `--bip38-passphrase-stdin`
 and for `import-wallet` / `electrum-decrypt --decrypt-password` /
@@ -4111,7 +4111,7 @@ better data for the failing chunk.
 | Trigger | Refusal |
 |---|---|
 | `chunk_index N` has more than 4 substitutions | `repair: chunk N has too many errors to correct uniquely (exceeds singleton bound = 8); cannot suggest correction` |
-| `chunk_index N` HRP is not the expected one | `repair: chunk N HRP mismatch — expected 'XX', found 'YY' (HRP is not BCH-protected; re-type the prefix)` |
+| `chunk_index N` HRP is not the expected one | `repair: chunk N HRP mismatch — expected 'XX', found 'YY' (HRP is not BCH-protected; re-type the prefix)`. `YY` is named only when it is a known card or address HRP or exactly two letters (the shape of a mistyped card HRP); any other prefix reads `found a prefix that is not a card HRP (input withheld)`, since it may be the start of a secret typed into the wrong field. |
 | `chunk_index N` data-part length is 94 or 95 | `repair: chunk N data-part length L is in BIP-93's reserved-invalid band [94, 95]; re-type the chunk` |
 | `chunk_index N` data-part length triggers long code for an HRP whose codec doesn't define one (`ms` / `md`) | `repair: chunk N data-part length L would require the long BCH code, which is not defined for HRP 'X' in this codec version` |
 | No chunks supplied | `repair: no chunks supplied` |
@@ -4441,6 +4441,7 @@ Umbrella subcommand for **reverse searches over a BIP-32 derivation graph** — 
 - **`account-of-descriptor`** — given seed + descriptor, find the cosigner role + account index.
 - **`address-of-xpub`** — given xpub + address, scan child indices to a gap limit.
 - **`passphrase-of-xpub`** — given seed + passphrase + target xpub, verify the passphrase produces the xpub at a standard path.
+- **`address-of-seed`** — given one or more seeds + one or more addresses, search the common paths (and the multisig key-to-slot map) and print the `bundle` command that mints the wallet.
 
 See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
 for the non-blocking `older()` advisory the descriptor-bearing modes
@@ -4480,7 +4481,7 @@ mnemonic xpub-search path-of-xpub \
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
 | `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
-| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Multi-occurrence within one template requires multiple `--add-path` flags |
+| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Multi-occurrence within one template requires multiple `--add-path` flags. Hardened steps take `'` or `h`; a template that is not a derivation path (a typographic quote `’`, `H`, a trailing `/`) is refused with exit 2 naming it. Before this, such a template was silently skipped and the run reported no match. |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
 | `-h, --help` | print help |
@@ -4620,7 +4621,7 @@ Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `lite
 | `--descriptor <VALUE>` | wallet descriptor; shape auto-detected per tie-break order |
 | `--descriptor-from <NODE>=<VALUE>` | explicit shape override (`literal=` / `md1=` / `bip388=`; `-` for stdin) |
 | `--language` / `--network` | BIP-39 wordlist + network selector (same defaults as `path-of-xpub`) |
-| `--min-account` / `--number-of-accounts` / `--max-account` / `--add-path` | candidate-set range (same as `path-of-xpub`; search runs once per cosigner) |
+| `--min-account` / `--number-of-accounts` / `--max-account` / `--add-path` | candidate-set range (same as `path-of-xpub`, including the refusal of a malformed `--add-path`; search runs once per cosigner) |
 | `--json` | emit JSON envelope on stdout |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure |
 | `-h, --help` | print help |
@@ -4707,7 +4708,7 @@ mnemonic xpub-search address-of-xpub \
 | `--xpub <XPUB-OR-MK1>` | parent xpub (any SLIP-0132 single-sig prefix: `xpub`/`tpub`/`ypub`/`upub`/`zpub`/`vpub`) OR an `mk1...` bech32 card carrying an xpub. Multisig prefixes (`Ypub`/`Zpub`/`Upub`/`Vpub`) refused |
 | `--xpub-stdin` | read parent xpub from stdin (single line, trailing newline stripped); mutex with `--xpub` |
 | `--target-address <ADDR>` | target address to search for; repeatable; at least one required |
-| `--gap-limit <N>` | per-chain scan window, indices `0..N`. Default `20` |
+| `--gap-limit <N>` | the index window `[0, N)` scanned on each chain (not BIP-44's "N consecutive unused addresses" rule). Default `20` |
 | `--external-only` | restrict scan to the external (receive) chain; skip change chain. Default scans both |
 | `--address-type <TYPE>` | explicit script-type for child-address rendering (`p2pkh` / `p2sh-p2wpkh` / `p2wpkh` / `p2tr`). Required for neutral `xpub`/`tpub`; overrides prefix-inferred type otherwise |
 | `--network <NET>` | network selector: `mainnet` / `testnet` / `signet` / `regtest`. Default inferred from the xpub version byte; `--network signet`/`--network regtest` overrides the test/signet/regtest ambiguity collapsed by the version byte. An explicit `--network` that disagrees with the (possibly mk1-decoded) xpub's own version bytes is refused fail-closed (exit 2) rather than scanning wrong-network addresses; omit `--network` to infer it instead |
@@ -4839,7 +4840,7 @@ mnemonic xpub-search passphrase-of-xpub \
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
 | `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
-| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path |
+| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Hardened steps take `'` or `h`; a template that is not a derivation path (a typographic quote `’`, `H`, a trailing `/`) is refused with exit 2 naming it. Before this, such a template was silently skipped and the run reported no match. |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
 | `-h, --help` | print help |
@@ -4979,6 +4980,129 @@ substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion).
 | Inline `--ms1 <v>` | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
 | Literal `--passphrase <v>` (not `-`, not `@env:VAR`) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | Every invocation (before search starts) | `note: passphrase verification searches the standard BIP-44/49/84/86 + BIP-48 templates × account range; if the wallet uses a non-standard path, supply --add-path or use \`xpub-search path-of-xpub\` to find the path first.` |
+
+### `mnemonic xpub-search address-of-seed`
+
+Given one or more seeds and one or more addresses you know the wallet holds,
+search the common derivation paths — and, for multisig, which key sits in
+which slot — for the wallet that produces them. On a match it prints the full
+path of every matched address and the whole `mnemonic bundle` command that
+mints that wallet. It writes no cards and changes nothing.
+(`design/SPEC_xpub_search_address_of_seed.md`, approved 2026-11-26.)
+
+#### Synopsis
+
+```sh
+mnemonic xpub-search address-of-seed \
+    --target-address <ADDR> [--target-address <ADDR>]... \
+    { --phrase <@env:VAR> | --phrase-stdin | --ms1 <MS1> | --ms1-stdin | <MS1>
+      | --from <phrase|ms1|entropy|seedqr>=<-|@env:VAR> [--from ...]... } \
+    [--passphrase <-|@env:VAR> | --passphrase-stdin] [--language <L>] \
+    [--descriptor <D> | --descriptor-file <FILE> | --descriptor-from md1=<CHUNK|->...] \
+    [--cosigner [@N=]<xpub|[fp/path]xpub|mk1>]... \
+    [--min-account 0] [--number-of-accounts 20] [--max-account <N>] [--add-path <T>]... \
+    [--gap-limit 20] [--external-only] [--independent-paths] [--refugium-seats] \
+    [--network mainnet] [--json]
+```
+
+#### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--target-address <ADDR>` | an address the wallet holds; repeatable, at least one. Classified by its decoded scriptPubKey; one that does not belong to `--network` is refused (exit 2) |
+| `--phrase <PHRASE>` / `--phrase-stdin` / `--ms1 <MS1>` / `--ms1-stdin` / `<MS1>` | one seed, as in the sibling modes. Inline `--phrase` / `--ms1` is refused by the argv guard unless `--allow-argv-secret`; a positional `<MS1>` is not seen by the guard and gets a stderr warning instead. Use `@env:VAR` or stdin |
+| `--from <node>=<value>` | two or more seeds: `phrase`, `ms1`, `entropy` or `seedqr`, each `=-` (stdin, at most one) or `=@env:VAR`; repeatable. Seeds are numbered from 0 in the order given. Conflicts with the one-seed flags |
+| `--passphrase <-\|@env:VAR>` / `--passphrase-stdin` | one BIP-39 passphrase, applied to every seed (see [How `--passphrase` is read](#mnemonic-cli-reference)). It changes the master fingerprint the output and the printed command use |
+| `--language <L>` | BIP-39 wordlist. Default `english`. One language for every seed: seeds of two languages cannot be combined in one run |
+| `--descriptor <D>` | an `@N` template (`wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))`), a keyed descriptor (its targets are confirmed directly and the seeds placed by key derivation), or a BIP-388 policy JSON. Without it the search is single-sig: `pkh`, `sh(wpkh)`, `wpkh` and `tr`, each over `@0/<0;1>/*` |
+| `--descriptor-file <FILE>` | the same, read from a file. A BIP-380 checksum (`#…`) is verified and accepted. A literal xpub written beside `@N` placeholders is taken as a placed cosigner |
+| `--descriptor-from md1=<CHUNK\|->` | a keyless md1 template (repeat per chunk, or `md1=-` for stdin); its recorded origin paths pin the search |
+| `--cosigner [@N=]<KEY>` | a key that is not a seed: an xpub, `[fp/path]xpub` or mk1. `@N=` states its slot; without it the slot is searched. An mk1's chunks may be given one per `--cosigner` (grouped by the chunk-set id in their headers) or together in one value; placed chunks repeat `@N=` per chunk. Needs `--descriptor`. Private keys are refused and never echoed |
+| `--min-account <N>` / `--number-of-accounts <N>` / `--max-account <N>` | the account window. Default `[0, 20)`: BIP-44, 49, 84, 86, BIP-48 script types 1', 2', 3' and BIP-87 per account, plus `m/45'` once (161 paths) |
+| `--add-path <T>` | another path template (`account'` substituted per account); repeatable. Hardened steps take `'` or `h`; a template that is not a derivation path (a typographic quote `’`, `H`, a trailing `/`) is refused (exit 2, naming it), never skipped. One that repeats a searched path (also spelt another way, `m/0'` beside `m/0h`) is dropped, as is a repeated `--target-address` |
+| `--gap-limit <N>` | the index window `[0, N)` on each searched chain — not BIP-44's "N consecutive unused addresses" rule. Default `20`, at most 2^31; see the cache ceiling below |
+| `--external-only` | search use-site alternative 0 only (the receive chain under `<0;1>`) |
+| `--independent-paths` | multisig: each seed at its own path (C^k path tuples) instead of every seed at the same path |
+| `--refugium-seats` | add the Refugium seat paths `m/270028'/coin'/n'`: all 256 for one key; for multisig the 8 rounds of each slot's seat (`n = 32r + slot`) |
+| `--network <NET>` | `mainnet` (default), `testnet`, `signet` or `regtest`; also sets the coin level of every path |
+| `--json` | one JSON document on stdout (`mode: "address-of-seed"`) |
+| `--no-auto-repair` | global flag; skip auto-fire BCH repair on a decode failure |
+
+The search is the whole space: a hit does not stop it. Before any key is
+derived, stderr states (`estimate:`) the candidate and script counts, the
+account-key derivations and the child-key cache with their estimated time,
+and the estimated memory; once the keys exist, a `scan estimate:` line gives
+the scan's estimated time (progress follows when it passes 30 s). Three
+ceilings refuse a run before it starts (exit 2), naming the flags that narrow
+it: more than 10^15 candidate scripts; a child-key cache of more than 2^26
+keys (paths × chains × `--gap-limit` per key: one seed at the default 161
+paths reaches it at a `--gap-limit` of about 208,000); and an estimated
+memory (the path lists plus the child-key cache) above 6144 MB, which a very
+wide account window reaches first (for example `--number-of-accounts
+3000000`).
+
+#### Worked example
+
+```sh
+export SEED_A='abandon abandon … about' SEED_Z='zoo zoo … wrong'
+mnemonic xpub-search address-of-seed --phrase @env:SEED_A \
+    --target-address bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
+```
+
+```text
+match: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
+  path:        m/84'/0'/0'/0/0
+  chain:       alternative 0 (step 0, external)      index: 0
+  account:     0   (bip84, m/84'/0'/0')
+  script type: p2wpkh
+  slots:       @0 = seed 0 (73c5da0a)
+to mint this wallet, run:
+  mnemonic bundle --network mainnet --descriptor 'wpkh([73c5da0a/84h/0h/0h]@0/<0;1>/*)' --slot @0.phrase=@env:SEED_A
+searched: 6440 child keys on 161 paths, index window [0, 20); 1 wallet(s) match
+```
+
+For multisig, one address cannot tell `multi` from `sortedmulti`: at any one
+index, `multi` with its keys in sorted order gives the same script. Every
+match therefore gets a twin check; when the twin also fits every target the
+result is exit 4, both wallets are printed with their commands, and the first
+three indices where the two wallets' addresses differ are listed so you can
+decide from your own records (or rerun with one of them as a second
+`--target-address`).
+
+The printed command is built from references, never from a secret: a seed
+given as `-` or `@env:VAR` is repeated that way; one typed inline becomes `-`
+(if nothing else reads stdin) or `@env:MNEMONIC_SEED_<i>`, and an inline
+passphrase `@env:MNEMONIC_PASSPHRASE`. A match at a path step of 2^29 or more
+(md1 cannot record it), or at the master `m` itself (`--add-path m`; a card
+cannot record the master as a key origin), prints the path and no command
+(exit 4, `path_unrecordable`). A cosigner xpub with no
+origin gets the shape's canonical origin, marked assumed, when its own header
+fits it, and a placeholder otherwise; the header shows only the depth and the
+last step, so an xpub at another account can fit too: check the path against
+your records.
+
+#### JSON output
+
+`{"schema_version":"1","mode":"address-of-seed","result":"match|unverified|no_match","reasons":[...],"wallets":[...],"unmatched_targets":[...],"seeds_without_match":[...],"searched":{...}}`.
+Each `wallets[]` entry carries `role` (`found` or `twin`), `twin_of`,
+`from_user_template`, `descriptor`, `script_type`, `merged_forms`, `slots`
+(`slot`, `source`, `seed_index`, `master_fingerprint`, `stated_fingerprint`,
+`origin_path`, `origin_known`, `template`, `account`, `refugium_seat`,
+`refugium_round`), `targets` (`address`, `alternative`, `step`, `index`, and
+each slot's full `path`, null for a cosigner whose origin is not known), `distinguishing`, `bundle_command` (null when none
+can be printed, with `bundle_command_unavailable` saying why),
+`bundle_command_redacted` and `redaction_note`. The normative shape is the
+spec's §6.
+
+#### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | one wallet (one per seed when several seeds are searched without a descriptor), every target in it, no twin, mintable by the printed command as printed |
+| 4 | **two meanings until the constellation exit-code scheme lands:** a wallet was found but must be verified (`XpubSearchUnverified`, `result: "unverified"`, `reasons` among `twin`, `split`, `unmatched`, `path_unrecordable`, `origin_unknown`, `cap`), or nothing matched (`XpubSearchNoMatch`, `result: "no_match"`). Text and JSON `result` tell them apart |
+| 1 | malformed phrase or address |
+| 2 | a refusal that needs input (`XpubSearchRefusal`): a slot without a key, more keys than slots, the same seed twice, `--cosigner` without `--descriptor`, a seed that equals no key of a keyed descriptor, targets none of which a searched script can produce, private-key material, `/*h`, a fixed single step, a bare `@N`, a second stdin reader, a count or memory estimate above its ceiling, a malformed `--add-path`, two keys for one `--cosigner @N=` slot, a keyed shape a card cannot record (named by the key you typed); also a target on another network and secret material on argv |
+| 64 | clap usage error |
 
 ## `mnemonic compare-cost`
 

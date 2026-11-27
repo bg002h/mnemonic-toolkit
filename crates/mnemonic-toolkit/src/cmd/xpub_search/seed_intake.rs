@@ -129,7 +129,13 @@ where
         // HRP-autodetect: only ms1 is accepted positionally. BIP-39 phrase
         // text has no HRP and is rejected with a clear pointer to --phrase.
         match repair::classify_hrp_prefix(v) {
-            Ok(CardKind::Ms1) => Source::Ms1(Zeroizing::new(v.clone())),
+            Ok(CardKind::Ms1) => {
+                // The argv guard keys on flags and cannot see a positional
+                // (argv_guard.rs, "What this row does NOT reach"); warn as
+                // `repair` does (review r1 M3).
+                secret_in_argv_warning(stderr, "positional ms1", "--ms1-stdin");
+                Source::Ms1(Zeroizing::new(v.clone()))
+            }
             Ok(CardKind::Mk1) | Ok(CardKind::Md1) => {
                 return Err(ToolkitError::BadInput(format!(
                     "xpub-search seed-intake positional requires an ms1 card; got HRP for `{}` \

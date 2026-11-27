@@ -112,7 +112,8 @@ pub struct AccountOfDescriptorArgs {
     /// Additional derivation-path template. Repeatable. The literal token
     /// `account'` (or `account`) is substituted with each iterated account
     /// index. Templates without an `account` token are searched once at the
-    /// literal path.
+    /// literal path. Hardened steps take `'` or `h`; a template that is not a
+    /// path is refused (exit 2).
     #[arg(long, value_name = "TEMPLATE")]
     pub add_path: Vec<String>,
 
@@ -240,6 +241,13 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
         args.min_account,
         args.number_of_accounts,
         args.max_account,
+    )?;
+    super::candidate_paths::check_add_paths(
+        "account-of-descriptor",
+        args.min_account,
+        args.number_of_accounts,
+        args.max_account,
+        &args.add_path,
     )?;
     // F-687: one stdin per invocation. Before this, `--phrase-stdin
     // --passphrase-stdin` let the seed read drain stdin and searched with the

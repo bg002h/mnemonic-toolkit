@@ -4,7 +4,8 @@
 //! secret-bearing surfaces that PR #25's cross-cutting `@env:VAR` resolver
 //! did NOT cover. This file pins the symmetric wire-up.
 //!
-//! Coverage: 3 modes (`path-of-xpub`, `account-of-descriptor`, `passphrase-of-xpub`)
+//! Coverage: 4 modes (`path-of-xpub`, `account-of-descriptor`, `passphrase-of-xpub`,
+//! `address-of-seed`)
 //! × 2 surfaces (`--phrase`, `--passphrase`) — happy-path + missing-var-exit-1.
 //! `address-of-xpub` has no seed material; skipped.
 //!
@@ -247,4 +248,92 @@ fn passphrase_of_xpub_env_passphrase_happy_path() {
         .code(0)
         .stdout(predicate::str::contains("\"result\":\"match\""))
         .stderr(predicate::str::contains("secret material on argv (--passphrase)").not());
+}
+
+// ============================================================================
+// address-of-seed × {--phrase, --passphrase, --from} × {happy, unset}
+// ============================================================================
+
+/// BIP-84 receive 0 of PHRASE with no passphrase.
+const AOS_TARGET: &str = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
+/// BIP-84 receive 0 of PHRASE with the passphrase "TREZOR".
+const AOS_TARGET_TREZOR: &str = "bc1qv5rmq0kt9yz3pm36wvzct7p3x6mtgehjul0feu";
+
+#[test]
+fn address_of_seed_env_phrase_and_from_happy_path() {
+    for flag in [
+        ["--phrase", "@env:AOS_PHRASE"],
+        ["--from", "phrase=@env:AOS_PHRASE"],
+    ] {
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .env("AOS_PHRASE", PHRASE)
+            .args(["xpub-search", "address-of-seed"])
+            .args(flag)
+            .args(["--target-address", AOS_TARGET, "--json"])
+            .assert()
+            .code(0)
+            .stdout(predicate::str::contains("\"result\":\"match\""))
+            .stderr(predicate::str::contains("secret material on argv").not());
+    }
+}
+
+#[test]
+fn address_of_seed_env_phrase_unset_fails() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env_remove("AOS_PHRASE_UNSET")
+        .args([
+            "xpub-search",
+            "address-of-seed",
+            "--phrase",
+            "@env:AOS_PHRASE_UNSET",
+            "--target-address",
+            AOS_TARGET,
+        ])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "env-var AOS_PHRASE_UNSET referenced by sentinel is not set",
+        ));
+}
+
+#[test]
+fn address_of_seed_env_passphrase_happy_and_unset() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("AOS_PASSPHRASE", "TREZOR")
+        .args([
+            "xpub-search",
+            "address-of-seed",
+            "--phrase-stdin",
+            "--passphrase",
+            "@env:AOS_PASSPHRASE",
+            "--target-address",
+            AOS_TARGET_TREZOR,
+            "--json",
+        ])
+        .write_stdin(PHRASE)
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("\"result\":\"match\""))
+        .stderr(predicate::str::contains("secret material on argv (--passphrase)").not());
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env_remove("AOS_PASSPHRASE_UNSET")
+        .args([
+            "xpub-search",
+            "address-of-seed",
+            "--phrase-stdin",
+            "--passphrase",
+            "@env:AOS_PASSPHRASE_UNSET",
+            "--target-address",
+            AOS_TARGET_TREZOR,
+        ])
+        .write_stdin(PHRASE)
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "env-var AOS_PASSPHRASE_UNSET referenced by sentinel is not set",
+        ));
 }

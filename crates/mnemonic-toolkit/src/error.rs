@@ -415,6 +415,19 @@ pub enum ToolkitError {
     XpubSearchPassphraseCandidatesExhausted {
         candidates_tried: usize,
     },
+    /// `xpub-search address-of-seed`: a refusal that needs user input (a slot
+    /// without a key, more keys than slots, the same seed twice, private-key
+    /// material, a second stdin reader, a count above the ceiling, ...).
+    /// SPEC_xpub_search_address_of_seed §5. Also every xpub-search verb's
+    /// malformed `--add-path`. Exit 2. The message starts with the verb
+    /// (`address-of-seed: …`) and never carries a secret value.
+    XpubSearchRefusal(String),
+    /// `xpub-search address-of-seed`: a wallet was found but must be verified
+    /// (`twin`, `split`, `unmatched`, `path_unrecordable`, `origin_unknown`,
+    /// `cap`). The report is already on stdout. Exit 4.
+    XpubSearchUnverified {
+        reasons: Vec<&'static str>,
+    },
 }
 
 /// v0.26.0 — reason discriminant for `ToolkitError::EnvVarMissing`. Drives the
@@ -699,6 +712,8 @@ impl ToolkitError {
             ToolkitError::WordCard(_) => 2,
             ToolkitError::XpubSearchNoMatch { .. } => 4,
             ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => 4,
+            ToolkitError::XpubSearchRefusal(_) => 2,
+            ToolkitError::XpubSearchUnverified { .. } => 4,
         }
     }
 
@@ -773,6 +788,8 @@ impl ToolkitError {
             ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => {
                 "XpubSearchPassphraseCandidatesExhausted"
             }
+            ToolkitError::XpubSearchRefusal(_) => "XpubSearchRefusal",
+            ToolkitError::XpubSearchUnverified { .. } => "XpubSearchUnverified",
         }
     }
 
@@ -894,6 +911,10 @@ impl ToolkitError {
                 "{} reserved-not-emitted: {}; deferred to v0.2+",
                 source, detail,
             ),
+            ToolkitError::HrpMismatch { flag, expected, got } if got.is_empty() => format!(
+                "{flag} expects a value with HRP '{expected}', and this value does not start \
+                 with '{expected}1' (input withheld; HRP is not BCH-protected; re-type the prefix)"
+            ),
             ToolkitError::HrpMismatch { flag, expected, got } => {
                 format!(
                     "{flag} expects a value with HRP '{expected}', got '{got}' \
@@ -976,18 +997,20 @@ impl ToolkitError {
             ToolkitError::SlotInputViolation { message, .. } => message.clone(),
             ToolkitError::TemplateFormUnsupportedShape { message } => message.clone(),
             ToolkitError::UnknownHrp { got, expected_one_of } => {
-                // v0.53.3 (audit M11 rider): truncate the echo to the FIRST
-                // 12 chars + `…` (only when longer) — a near-miss secret-ish
-                // positional must never appear in full on stderr.
-                let shown = if got.chars().count() > 12 {
-                    let head: String = got.chars().take(12).collect();
-                    format!("{head}…")
-                } else {
-                    got.clone()
+                // Review r1 M1: name only the prefix before the last `1`, and
+                // only when `hrp_is_echoable` allows it. The positional may be
+                // a secret (a phrase, a hex seed, or a card whose payload
+                // follows the separator), so no payload character is shown.
+                let lower = got.to_lowercase();
+                let shown = match lower.rfind('1').map(|i| &lower[..i]) {
+                    Some(h) if crate::repair::hrp_is_echoable(h) => {
+                        format!("positional argument beginning '{h}1'")
+                    }
+                    _ => "positional argument (input withheld)".to_string(),
                 };
                 format!(
-                    "positional argument '{shown}' does not begin with a recognized \
-                     HRP prefix (expected one of: {})",
+                    "{shown} does not begin with a recognized HRP prefix \
+                     (expected one of: {})",
                     expected_one_of.join(", ")
                 )
             }
@@ -1013,6 +1036,12 @@ impl ToolkitError {
                     )
                 }
             }
+            // The message starts with the verb (`address-of-seed: …`).
+            ToolkitError::XpubSearchRefusal(m) => format!("xpub-search {m}"),
+            ToolkitError::XpubSearchUnverified { reasons } => format!(
+                "a wallet was found but must be verified ({}); see the report above",
+                reasons.join(", ")
+            ),
         }
     }
 

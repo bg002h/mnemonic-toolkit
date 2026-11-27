@@ -299,6 +299,30 @@ const FLAG_ROUTES: &[Route] = &[
         source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs",
         evidence: &["pub phrase_stdin", "fn phrase_stdin"],
     },
+    // -- address-of-seed (3): --ms1 via the shared seed_intake.rs; --passphrase
+    //    and --phrase in the verb's own file.
+    Route {
+        subcommand: "xpub-search-address-of-seed",
+        flag: "--ms1",
+        source_file: "src/cmd/xpub_search/seed_intake.rs",
+        evidence: &["--ms1-stdin", "ms1_stdin", "secret_in_argv_warning"],
+    },
+    Route {
+        subcommand: "xpub-search-address-of-seed",
+        flag: "--passphrase",
+        source_file: "src/cmd/xpub_search/address_of_seed.rs",
+        evidence: &[
+            "passphrase-stdin",
+            "passphrase_stdin",
+            "secret_in_argv_warning",
+        ],
+    },
+    Route {
+        subcommand: "xpub-search-address-of-seed",
+        flag: "--phrase",
+        source_file: "src/cmd/xpub_search/address_of_seed.rs",
+        evidence: &["pub phrase_stdin", "fn phrase_stdin"],
+    },
 ];
 
 // ── Axis 2: `--from` routes (`=-` value-uniform per subcommand) ──
@@ -385,6 +409,12 @@ const FROM_ROUTES: &[Route] = &[
         flag: "--from",
         source_file: "src/cmd/word_card.rs",
         evidence: &["== \"-\""],
+    },
+    Route {
+        subcommand: "xpub-search-address-of-seed",
+        flag: "--from",
+        source_file: "src/cmd/xpub_search/address_of_seed.rs",
+        evidence: &["=-", "value == \"-\""],
     },
 ];
 

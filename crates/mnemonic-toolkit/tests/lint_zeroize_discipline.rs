@@ -433,6 +433,11 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         evidence: &["let passphrase: Zeroizing<String>"],
     },
     ZeroizeRow {
+        label: "address-of-seed wraps the BIP-39 passphrase in Zeroizing<String>",
+        source_file: "src/cmd/xpub_search/address_of_seed.rs",
+        evidence: &["let passphrase: Zeroizing<String>"],
+    },
+    ZeroizeRow {
         label: "xpub-search seed_intake owns the phrase/ms1 source + decoded entropy in Zeroizing",
         source_file: "src/cmd/xpub_search/seed_intake.rs",
         evidence: &["Phrase(Zeroizing<String>)", "Zeroizing<Vec<u8>>"],

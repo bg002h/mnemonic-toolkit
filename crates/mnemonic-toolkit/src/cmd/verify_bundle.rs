@@ -325,6 +325,11 @@ pub fn run<W: Write, E: Write>(
             args.slot.iter().any(|s| s.is_stdin_sentinel()),
             "--slot @N.<secret>=-",
         ),
+        // Final review (fable) M3 of the echo/stdin fix: `--from <node>=-`.
+        (
+            args.from.as_deref().is_some_and(|v| v.ends_with("=-")),
+            "--from <source>=-",
+        ),
         // F-687b fold 1 (review M3): the path-is-stdin readers the F-687
         // guard above lists.
         (
@@ -2467,7 +2472,7 @@ fn ms1_card_checks(
                 None => {
                     // Uncorrectable, or auto-repair disabled — original
                     // decode-error behavior, unchanged.
-                    let err_msg = format!("{:?}", e);
+                    let err_msg = crate::friendly::friendly_ms_codec(&e);
                     checks.push(VerifyCheck {
                         name: "ms1_decode".into(),
                         passed: false,
@@ -2589,7 +2594,7 @@ pub fn emit_verify_checks(
                     json_context,
                 )?;
             }
-            let err_msg = format!("{:?}", e);
+            let err_msg = crate::friendly::friendly_mk_codec(e);
             checks.push(VerifyCheck {
                 name: "mk1_decode".into(),
                 passed: false,
@@ -2811,7 +2816,7 @@ fn emit_multisig_checks(
                                 json_context,
                             )?;
                         }
-                        Ok(Err(format!("{:?}", e)))
+                        Ok(Err(crate::friendly::friendly_mk_codec(&e)))
                     }
                 }
             },
@@ -3046,7 +3051,7 @@ fn emit_multisig_checks(
                         }
                         None => {
                             // Case 3: full-mode, supplied present, decodes Err.
-                            let err_msg = format!("{:?}", e);
+                            let err_msg = crate::friendly::friendly_ms_codec(&e);
                             checks.push(VerifyCheck {
                                 name: format!("ms1_decode[{}]", i),
                                 passed: false,
@@ -3402,7 +3407,7 @@ fn emit_multisig_checks(
             checks.push(md1_origin_check(&expected_md_decoded, desc));
         }
         Err(e) => {
-            let err_msg = format!("{:?}", e);
+            let err_msg = crate::friendly::friendly_md_codec(e);
             checks.push(VerifyCheck {
                 name: "md1_decode".into(),
                 passed: false,
@@ -3559,7 +3564,7 @@ fn emit_md1_checks(
                     json_context,
                 )?;
             }
-            let err_msg = format!("{:?}", e);
+            let err_msg = crate::friendly::friendly_md_codec(&e);
             checks.push(VerifyCheck {
                 name: "md1_decode".into(),
                 passed: false,
