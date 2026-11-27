@@ -345,7 +345,10 @@ pub(crate) fn envelope_to_resolved_slots<E: std::io::Write>(
     for (i, chunks) in mk1_outer.iter().enumerate() {
         let chunk_refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
         let card = mk_codec::decode(&chunk_refs).map_err(|e| {
-            ToolkitError::BadInput(format!("--import-json: mk1[{i}] decode failed: {e}"))
+            ToolkitError::BadInput(format!(
+                "--import-json: mk1[{i}] decode failed: {}",
+                crate::friendly::friendly_mk_codec(&e)
+            ))
         })?;
         let mut slot = mk1_card_to_resolved_slot(&card, i, stderr)?;
         // v0.37.10: the mk1 card's origin_path is the account-consistent path (it

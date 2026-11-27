@@ -242,6 +242,12 @@ pub fn run<W: Write, E: Write>(
                 .is_some_and(crate::passphrase_input::path_is_stdin),
             "--descriptor-file /dev/stdin",
         ),
+        // Final review (fable) M3 of the echo/stdin fix: a slot read from
+        // stdin is a reader too, against the two path flags above.
+        (
+            args.slot.iter().any(|s| s.is_stdin_sentinel()),
+            "--slot @N.<secret>=-",
+        ),
     ])?;
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before downstream

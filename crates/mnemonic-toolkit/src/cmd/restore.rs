@@ -1856,9 +1856,13 @@ pub(crate) fn complete_multisig_template<E: Write>(
     for spec in ctx.cosigner_specs {
         if spec.starts_with('@') {
             let (lhs, rhs) = spec.split_once('=').ok_or_else(|| {
-                bad(format!(
-                    "--cosigner @N= expects `@N=<mk1|xpub>`, got `{spec}`"
-                ))
+                // The value may be a secret pasted into the wrong flag, so it
+                // is withheld (final review fable I1 of the echo fix).
+                bad(
+                    "--cosigner @N= expects `@N=<mk1|xpub>`; the value has no `=` \
+                     (input withheld)"
+                        .to_string(),
+                )
             })?;
             let nn: u8 = lhs
                 .trim_start_matches('@')
@@ -2602,7 +2606,12 @@ fn decode_cosigner_card(
 /// set, and the leftover-chunks path can surface the real "received K chunks,
 /// header declares total = M" message).
 fn try_decode_cosigner_card(chunks: &[&str]) -> Result<CandidateKey, ToolkitError> {
-    let kc = mk_codec::decode(chunks).map_err(|e| bad(format!("--cosigner mk1 decode: {e}")))?;
+    let kc = mk_codec::decode(chunks).map_err(|e| {
+        bad(format!(
+            "--cosigner mk1 decode: {}",
+            crate::friendly::friendly_mk_codec(&e)
+        ))
+    })?;
     Ok(CandidateKey {
         key65: crate::synthesize::xpub_to_65(&kc.xpub),
         fingerprint: kc.origin_fingerprint.unwrap_or_default(),
@@ -4864,9 +4873,13 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         let mut by_pos: std::collections::BTreeMap<u8, Vec<String>> =
             std::collections::BTreeMap::new();
         for spec in &args.cosigner {
-            let (lhs, rhs) = spec
-                .split_once('=')
-                .ok_or_else(|| bad(format!("--cosigner expects @N=<mk1|xpub>, got `{spec}`")))?;
+            let (lhs, rhs) = spec.split_once('=').ok_or_else(|| {
+                // Withheld: the value may be a secret pasted into the
+                // wrong flag (final review fable I1 of the echo fix).
+                bad("--cosigner expects @N=<mk1|xpub>; the value has no `=` \
+                         (input withheld)"
+                    .to_string())
+            })?;
             let n: u8 = lhs
                 .trim_start_matches('@')
                 .parse()
@@ -4892,8 +4905,12 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             let supplied65: [u8; 65] = if values.iter().all(|v| v.to_lowercase().starts_with("mk1"))
             {
                 let refs: Vec<&str> = values.iter().map(|v| v.as_str()).collect();
-                let kc = mk_codec::decode(&refs)
-                    .map_err(|e| bad(format!("--cosigner @{n} mk1 decode: {e}")))?;
+                let kc = mk_codec::decode(&refs).map_err(|e| {
+                    bad(format!(
+                        "--cosigner @{n} mk1 decode: {}",
+                        crate::friendly::friendly_mk_codec(&e)
+                    ))
+                })?;
                 if kc.origin_path.is_empty() {
                     header = SuppliedHeader::Mk1WithoutPath;
                 } else {

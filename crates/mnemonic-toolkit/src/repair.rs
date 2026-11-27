@@ -131,9 +131,9 @@ const ECHOABLE_HRPS: &[&str] = &["ms", "mk", "md", "mt", "mr", "bc", "tb", "bcrt
 /// May an error message name this found HRP? Only a known HRP, or exactly two
 /// ASCII letters (the shape of a mistyped card HRP, such as `mq` or `xs`);
 /// anything else may be the start of a secret typed into the wrong field, so
-/// it is withheld. Every HRP diagnostic uses this one rule. No BIP-39 word
-/// has fewer than three letters, so a two-letter prefix is never a word of
-/// a pasted phrase.
+/// it is withheld. Every HRP diagnostic uses this one rule. A two-letter echo
+/// shows at most two lower-cased letters (under 10 bits), and only for input
+/// with exactly two letters before its last `1`.
 pub(crate) fn hrp_is_echoable(found: &str) -> bool {
     ECHOABLE_HRPS.contains(&found)
         || (found.len() == 2 && found.bytes().all(|b| b.is_ascii_alphabetic()))

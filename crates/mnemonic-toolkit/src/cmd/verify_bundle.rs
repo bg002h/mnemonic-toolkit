@@ -325,6 +325,11 @@ pub fn run<W: Write, E: Write>(
             args.slot.iter().any(|s| s.is_stdin_sentinel()),
             "--slot @N.<secret>=-",
         ),
+        // Final review (fable) M3 of the echo/stdin fix: `--from <node>=-`.
+        (
+            args.from.as_deref().is_some_and(|v| v.ends_with("=-")),
+            "--from <source>=-",
+        ),
         // F-687b fold 1 (review M3): the path-is-stdin readers the F-687
         // guard above lists.
         (
