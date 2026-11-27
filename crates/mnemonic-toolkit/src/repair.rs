@@ -618,6 +618,14 @@ pub enum RepairError {
         /// The codec's error text.
         detail: String,
     },
+    /// Brian's ruling of 2026-11-26 (exit-code spec §2b item 3): mk1 chunks
+    /// with different `chunk_set_id`s that together cover every index of a
+    /// set. A suspected miscorrection or two cards mixed, clean or
+    /// corrected: atomic (2, nothing printed), never an indel trigger.
+    MixedChunkSets {
+        /// Names the set ids and the set size.
+        detail: String,
+    },
     SetReassemblyMismatch {
         /// Human-readable identifier of the failing group (e.g.
         /// `"chunk_set_id 0x12345"` or `"single-string chunk 2"`), so a
@@ -714,6 +722,7 @@ impl std::fmt::Display for RepairError {
                 f,
                 "repair: nothing to correct, but the input ({group}) is not a card: {detail}"
             ),
+            RepairError::MixedChunkSets { detail } => write!(f, "repair: {detail}"),
             RepairError::SetReassemblyMismatch { group, detail } => write!(
                 f,
                 "repair: each chunk corrected individually, but the set does not reassemble ({group}): {detail} — the correction(s) may have aliased to a DIFFERENT valid card; this output is NOT trustworthy"
@@ -1139,6 +1148,63 @@ fn group_shape(headers: &[&StringLayerHeader]) -> GroupShape {
     }
 }
 
+/// Ruling 3 (exit-code spec §2b item 3): the incomplete chunked groups
+/// (each well formed and short of its total) that share one total, have
+/// different set ids, and together hold every index `0..total`. `Some`
+/// names the split; `None` when no such pair of groups or more exists. A
+/// complete group is a card by itself and takes no part; a malformed group
+/// is refused by its own shape check.
+fn mixed_set_ids_cover_a_set(
+    order: &[GroupKey],
+    members: &HashMap<GroupKey, Vec<usize>>,
+    parsed: &[Option<ParsedMk1Chunk>],
+) -> Option<String> {
+    // total -> (the set ids, in first-seen order; the indices they hold)
+    let mut by_total: Vec<(usize, Vec<u32>, Vec<bool>)> = Vec::new();
+    for key in order {
+        let GroupKey::Chunked(csid) = *key else {
+            continue;
+        };
+        let headers: Vec<&StringLayerHeader> = members[key]
+            .iter()
+            .filter_map(|&i| parsed[i].as_ref().map(|p| &p.header))
+            .collect();
+        if !matches!(group_shape(&headers), GroupShape::Short) {
+            continue;
+        }
+        let Some(StringLayerHeader::Chunked { total_chunks, .. }) = headers.first() else {
+            continue;
+        };
+        let total = *total_chunks as usize;
+        let slot = match by_total.iter().position(|(t, _, _)| *t == total) {
+            Some(p) => p,
+            None => {
+                by_total.push((total, Vec::new(), vec![false; total]));
+                by_total.len() - 1
+            }
+        };
+        let (_, ids, seen) = &mut by_total[slot];
+        ids.push(csid);
+        for h in &headers {
+            if let StringLayerHeader::Chunked { chunk_index, .. } = h {
+                seen[*chunk_index as usize] = true;
+            }
+        }
+    }
+    by_total
+        .into_iter()
+        .find(|(_, ids, seen)| ids.len() >= 2 && seen.iter().all(|&s| s))
+        .map(|(total, ids, _)| {
+            let ids: Vec<String> = ids.iter().map(|c| format!("0x{c:05x}")).collect();
+            format!(
+                "chunks with different chunk_set_id ({}) together cover every index of a set \
+                 of {total}; these strings are not one card's chunk set (a suspected \
+                 miscorrection, or chunks of two cards mixed)",
+                ids.join(", ")
+            )
+        })
+}
+
 /// Fold two `GroupVerdict`s to the dominant one across a multi-group batch
 /// (SPEC §2 — `candidate > incomplete > bless`; a reject is an `Err`).
 fn fold_verdict(acc: Option<GroupVerdict>, v: GroupVerdict) -> GroupVerdict {
@@ -1233,6 +1299,15 @@ fn verify_mk1_set(
                 })
                 .push(i);
         }
+    }
+
+    // Brian's ruling of 2026-11-26 (exit-code spec §2b item 3): incomplete
+    // groups whose set ids differ but whose indices together cover every
+    // index of a set are a suspected miscorrection or two cards mixed, as
+    // `md` refuses chunks of two cards: 2, nothing printed. Groups that do
+    // not cover every index between them stay incomplete sets (decision 7).
+    if let Some(reason) = mixed_set_ids_cover_a_set(&order, &members, &parsed) {
+        return Err(RepairError::MixedChunkSets { detail: reason });
     }
 
     for key in &order {
@@ -1975,6 +2050,7 @@ pub(crate) fn is_indel_trigger(e: &RepairError) -> bool {
         | RepairError::UnsupportedCodeVariant { .. }
         | RepairError::IndelUnrecoverable { .. }
         | RepairError::NotACard { .. }
+        | RepairError::MixedChunkSets { .. }
         | RepairError::SetReassemblyMismatch { .. } => false,
     }
 }

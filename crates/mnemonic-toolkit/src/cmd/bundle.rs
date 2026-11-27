@@ -2838,8 +2838,11 @@ pub(crate) fn bind_descriptor_mode_paths(
             && new_paths[*idx as usize] != user_origin
         {
             let inline_path = origin_to_derivation_path(&new_paths[*idx as usize])?;
+            // Exit 2 (Brian, 2026-11-26, exit-code spec §2b item 5): the
+            // slot's path and the inline path are two parts of one input that
+            // disagree, as a slot fingerprint against its annotation is.
             return Err(ToolkitError::SlotInputViolation {
-                kind: "path-mismatch",
+                kind: "path-conflict",
                 message: format!(
                     "slot @{idx} path mismatch: --slot says {user_path}, descriptor inline [.../{inline_path}] disagrees; supply consistent values or remove one source."
                 ),

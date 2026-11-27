@@ -549,3 +549,82 @@ fn descriptor_mode_3_of_3_emits_per_slot_ms1_post_v0_21() {
         .assert()
         .success();
 }
+
+/// Brian's ruling of 2026-11-26 (exit-code spec §2b item 3): mk1 chunks of
+/// two different `chunk_set_id`s that together cover every chunk index are
+/// INVALID (2). `verify-bundle` groups supplied mk1 chunks by set id, so
+/// cosigner 0's chunk 0 beside cosigner 1's chunk 1 is two incomplete
+/// groups, neither of which decodes: 2, not a pass and not a comparison (1).
+#[test]
+fn ruling_3_mixed_set_id_chunks_covering_every_index_are_2() {
+    let bundle_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--multisig-path-family",
+            "bip48",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
+    let bundle: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let cards: Vec<Vec<String>> = bundle["mk1"]
+        .as_array()
+        .expect("mk1 array")
+        .iter()
+        .map(|inner| {
+            inner
+                .as_array()
+                .expect("inner mk1 array")
+                .iter()
+                .map(|c| c.as_str().unwrap().to_string())
+                .collect()
+        })
+        .collect();
+    assert_eq!(cards.len(), 2);
+    assert_eq!(cards[0].len(), 2, "each cosigner card is two chunks");
+    assert_eq!(cards[1].len(), 2, "each cosigner card is two chunks");
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--multisig-path-family".into(),
+        "bip48".into(),
+        "--slot".into(),
+        format!("@0.phrase={TREZOR_12_ZERO}"),
+        "--slot".into(),
+        format!("@1.phrase={BIP39_TEST_2}"),
+        "--mk1".into(),
+        cards[0][0].clone(),
+        "--mk1".into(),
+        cards[1][1].clone(),
+    ];
+    for key in ["ms1", "md1"] {
+        for m in bundle[key].as_array().expect("array") {
+            args.push(format!("--{key}"));
+            args.push(m.as_str().unwrap().to_string());
+        }
+    }
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args(&args)
+        .assert()
+        .code(2);
+}

@@ -747,9 +747,11 @@ fn bundle_retains_row19_inline_vs_slot_path_mismatch_refusal() {
         ])
         .assert()
         .failure()
-        // Exit-code spec §3 test 4: the stated path checked against the
-        // descriptor's own recorded origin came out different (NO).
-        .code(1)
+        // Brian's ruling of 2026-11-26 (exit-code spec §2b item 5, ruling
+        // 4): the slot's path and the descriptor's inline path are two parts
+        // of one input that disagree, INVALID (2), as a slot fingerprint that
+        // disagrees with its annotation is.
+        .code(2)
         .stderr(
             predicate::str::contains("path mismatch").and(predicate::str::contains("disagrees")),
         );

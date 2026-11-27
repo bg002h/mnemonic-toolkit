@@ -51,6 +51,17 @@ this entry supersedes them.
   error `kind` values: `Internal`, `IoFailure`, `ModeInputViolation`,
   `Refused` and `Usage`; a flag-combination refusal of `convert` reports
   `Usage` where it reported `ConvertRefusal`.
+- **Brian's rulings of 2026-11-26 (spec §2b items 3 and 5).**
+  `repair --mk1` refuses (2, nothing printed) short chunk groups under
+  different `chunk_set_id`s that declare one size and together cover every
+  index of it, clean or corrected: a suspected miscorrection of a set id,
+  or chunks of two cards mixed, as `mk repair` does (they exited 0, or 16
+  corrected). Short groups that do not cover every index stay incomplete
+  sets, groups of different sizes never combine, and a complete card in
+  the same call never counts. `bundle`'s `--slot @N.path=` that disagrees
+  with the descriptor's inline path is 2 (was 1), as a slot fingerprint
+  that disagrees with its annotation is; its error `kind` is now
+  `path-conflict` (`restore`'s `path-mismatch` stays 1).
 
 ### Huge `--length` and account-window values are refused or streamed, not aborted
 

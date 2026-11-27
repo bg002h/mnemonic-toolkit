@@ -865,7 +865,10 @@ fn c1_mk_negative_vectors_repair_as_mk_does() {
         // refused clean (nothing printed) and printed at 22 when corrected.
         ("N6_", (2, false), (22, true)),
         ("N7_", (2, false), (22, true)),
-        ("N8_", (0, true), (16, true)),
+        // N8 is two chunks under different chunk_set_ids covering both
+        // indices: Brian's ruling of 2026-11-26 (spec §2b item 3) refuses
+        // it, clean or corrected (it was 0 / 16, two incomplete groups).
+        ("N8_", (2, false), (2, false)),
         ("N9_", (2, false), (22, true)),
         ("N10_", (2, false), (22, true)),
         ("N11_", (2, false), (2, false)),
@@ -974,4 +977,87 @@ fn final_d_json_marks_an_incomplete_mk1_set() {
     assert_eq!(out.status.code(), Some(0));
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
     assert!(v.get("incomplete").is_none(), "complete card: {v}");
+}
+
+/// Brian's ruling of 2026-11-26 on exit-code spec §2b item 3: chunks with
+/// different `chunk_set_id`s whose indices together cover every index of
+/// the set are refused as INVALID (2) with nothing printed, clean or
+/// corrected, as a suspected miscorrection or two cards mixed (`md` refuses
+/// chunks of two cards the same way). Decision 7 is kept: groups that do not
+/// cover every index between them stay incomplete sets (0 clean, 16
+/// corrected), and a complete card beside another card's lone chunk is a
+/// card plus an incomplete set.
+#[test]
+fn ruling_3_mixed_set_ids_covering_every_index_is_2() {
+    let mnemonic = assert_cmd::cargo::cargo_bin("mnemonic");
+    let mk = std::env::var("MK_BIN").ok();
+    let cases: Vec<(&str, Vec<String>, CodePrinted)> = vec![
+        (
+            "two ids, indices 0 and 1, clean",
+            vec![CHUNK0.into(), SECOND_CHUNK1.into()],
+            (2, false),
+        ),
+        (
+            "two ids, indices 1 and 0, clean",
+            vec![SECOND_CHUNK1.into(), CHUNK0.into()],
+            (2, false),
+        ),
+        (
+            "two ids, indices 0 and 1, one corrected",
+            vec![substitute_near_end(CHUNK0), SECOND_CHUNK1.into()],
+            (2, false),
+        ),
+        (
+            "two ids, both index 0 (no cover): two incomplete sets",
+            vec![CHUNK0.into(), SECOND_CHUNK0.into()],
+            (0, true),
+        ),
+        (
+            "two ids, both index 0, one corrected: two incomplete sets",
+            vec![substitute_near_end(CHUNK0), SECOND_CHUNK0.into()],
+            (16, true),
+        ),
+        (
+            "a complete card and another card's lone chunk",
+            vec![CHUNK0.into(), CHUNK1.into(), SECOND_CHUNK1.into()],
+            (0, true),
+        ),
+    ];
+    for (label, strings, want) in cases {
+        let args: Vec<String> = std::iter::once("repair".to_string())
+            .chain(
+                strings
+                    .iter()
+                    .flat_map(|s| ["--mk1".to_string(), s.clone()]),
+            )
+            .collect();
+        let got = run_codes(mnemonic.to_str().unwrap(), &args);
+        assert_eq!(got, want, "{label}: mnemonic repair --mk1");
+        let json_args: Vec<String> = ["repair".to_string(), "--json".to_string()]
+            .into_iter()
+            .chain(args.iter().skip(1).cloned())
+            .collect();
+        assert_eq!(
+            run_codes(mnemonic.to_str().unwrap(), &json_args),
+            want,
+            "{label}: mnemonic repair --json --mk1"
+        );
+        if let Some(mk) = &mk {
+            let mk_args: Vec<String> = std::iter::once("repair".to_string())
+                .chain(strings.iter().cloned())
+                .collect();
+            assert_eq!(run_codes(mk, &mk_args), want, "{label}: mk repair");
+        }
+    }
+    // The refusal names the split.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--mk1", CHUNK0, "--mk1", SECOND_CHUNK1])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("different chunk_set_id"),
+        "the refusal names the split: {stderr}"
+    );
 }

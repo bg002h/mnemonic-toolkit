@@ -79,7 +79,8 @@ Further rules every binary follows:
 - **Every correction sets 16.** A verb that decoded a damaged card by
   correcting it, and used the corrected value, exits with 16 set even
   when everything else succeeded. A script that wants to accept a
-  corrected plate tests `[ $(( rc & ~16 )) -eq 0 ]`.
+  corrected plate tests `[ $(( rc & ~16 )) -eq 0 ]`. `mt` also sets 16
+  when it tells the operator to re-cut a damaged duplicate it discarded.
 - **A correction in an incomplete chunk set is 16, not 20.** The rest
   of the set verifies it when it is reassembled. Only a correction with
   no oracle at all (a single string that is not chunked, an `ms1`) is
@@ -121,11 +122,11 @@ per-verb detail.
 
 | Binary | Codes it uses | Notes |
 |---|---|---|
-| `mnemonic` | 0, 1, 2, 4, 8, 16, 18, 20, 22, 32, 64, 101 and sums | [`mnemonic` reference](#mnemonic-reference). `repair`: 16 verified or incomplete-set, 20 unverified (also a corrected `ms1` share), 22 a corrected string that is not a card (a single string that does not decode, an mk1 chunk whose header does not parse, an `ms1` secret share at index `s`); a malformed mk1 set is 2 with nothing printed. `verify-bundle`: 1 mismatch, 2 undecodable card, 4 partial; a corrected card adds 16 (17, 18). A `--slot` key of the other network is 8; input that is not UTF-8 is 2. |
+| `mnemonic` | 0, 1, 2, 4, 8, 16, 18, 20, 22, 32, 64, 101 and sums | [`mnemonic` reference](#mnemonic-reference). `repair`: 16 verified or incomplete-set, 20 unverified (also a corrected `ms1` share), 22 a corrected string that is not a card (a single string that does not decode, an mk1 chunk whose header does not parse, an `ms1` secret share at index `s`); a malformed mk1 set is 2 with nothing printed, and so are short mk1 groups under different `chunk_set_id`s that together cover every index of one size. `verify-bundle`: 1 mismatch, 2 undecodable card, 4 partial; a corrected card adds 16 (17, 18). A `--slot` key of the other network is 8; input that is not UTF-8 is 2. |
 | `md` | 0, 1, 2, 4, 8, 16, 20, 22, 32, 64, 101 and sums | [`md` reference](#md-md-cli-reference). `repair` decode-checks each corrected string (adds 2). `descriptor --verify-against` NOT spend-equal is 1. |
 | `ms` | 0, 1, 2, 8, 20, 22, 32, 64, 101 and sums | [`ms` reference](#ms-ms-cli-reference). `repair` applied is 20 (also a corrected K-of-N share); 22 a corrected string that is neither a card nor a share; `inspect` that would not decode is 2. |
-| `mk` | 0, 1, 2, 8, 16, 18, 22, 32, 64, 101 and sums | [`mk` reference](#mk-mk-cli-reference). A correction in `decode`, `verify`, `inspect`, `address` or `derive` sets 16. `repair`: 18 a corrected card that fails validation, 22 a corrected string that is not a card (a single string that does not decode, or a chunk whose header does not parse); a malformed set is 2 with nothing printed. |
-| `mt` | 0, 1, 2, 8, 16, 32, 64, 101 and sums | No chapter in this manual. A correction in `decode`, `verify` or `inspect` sets 16; a named `--bitcoin-cli` that fails is 32; no node at all stays 0. |
+| `mk` | 0, 1, 2, 8, 16, 18, 22, 32, 64, 101 and sums | [`mk` reference](#mk-mk-cli-reference). A correction in `decode`, `verify`, `inspect`, `address` or `derive` sets 16. `repair`: 18 a corrected card that fails validation, 22 a corrected string that is not a card (a single string that does not decode, or a chunk whose header does not parse); a malformed set is 2 with nothing printed, and so are short groups under different `chunk_set_id`s that together cover every index of one size (a suspected miscorrection, or two cards mixed). |
+| `mt` | 0, 1, 2, 8, 16, 32, 64, 101 and sums | No chapter in this manual. A correction in `decode`, `verify` or `inspect` sets 16, and so does a damaged duplicate `mt` discards and says to re-cut; a named `--bitcoin-cli` that fails is 32; no node at all, or `--offline`, stays 0; `--offline` with `--bitcoin-cli`, or on `verify`, is 64. |
 | `me` | 0, 1, 2, 8, 32, 64, 101 and sums | No chapter in this manual. Destination refusals are 8; `sysw pack --expect` not met is 1, and so is a sealed file that fails to open (the AEAD check); every verb's `--help` ends with an `Exit status:` line; a named `ME_PREVIEW_BIN` that is missing is 32. |
 | `mr` | 0, 1, 2, 8, 16, 20, 22, 32, 64, 101 and sums | [`mr` reference](#mr-mr-cli-reference). |
 | `mr-sitting` | 0, 1, 2, 8, 32, 64, 101, 130, 128+N | [`mr-sitting` reference](#mr-sitting-mr-sitting-reference). A deliberate stop at a prompt is 130. |

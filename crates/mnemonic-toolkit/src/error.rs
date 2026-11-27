@@ -385,7 +385,7 @@ pub enum ToolkitError {
     #[allow(dead_code)]
     SlotInputViolation {
         /// "conflict" | "gap" | "invalid-set" | "duplicate-subkey" | "language-conflict"
-        /// | "path-mismatch" | "missing-origin".
+        /// | "path-mismatch" | "path-conflict" | "missing-origin".
         kind: &'static str,
         message: String,
     },
@@ -714,10 +714,13 @@ impl ToolkitError {
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
             ToolkitError::RestoreMismatch { .. } => NO,
             ToolkitError::SilentPayment(_) => INVALID,
-            // `path-mismatch`: a stated origin checked against what records the
-            // key's path (an inline origin, an xpub header, an mk1 card, the
-            // seed search) and found different (test 4, NO). Every other kind
-            // is an input wrong or insufficient for the verb (test 6).
+            // `path-mismatch`: a stated origin checked against a separate
+            // record of the key's path (`restore`: an xpub header, an mk1
+            // card, the seed search) and found different (test 4, NO). Every
+            // other kind is an input wrong or insufficient for the verb (test
+            // 6), `path-conflict` included: `bundle`'s inline descriptor path
+            // against the slot's path is one input disagreeing with itself
+            // (ruling 4; Brian, 2026-11-26).
             ToolkitError::SlotInputViolation { kind, .. } if *kind == "path-mismatch" => NO,
             ToolkitError::SlotInputViolation { .. } => INVALID,
             ToolkitError::TemplateFormUnsupportedShape { .. } => INVALID,
@@ -1454,6 +1457,17 @@ mod tests {
                     message: "x".into(),
                 },
                 NO,
+            ),
+            // Brian's ruling of 2026-11-26 (spec §2b item 5): `bundle`'s
+            // inline descriptor path against the slot's path is one input
+            // disagreeing with itself, 2, like a slot fingerprint against its
+            // annotation.
+            (
+                ToolkitError::SlotInputViolation {
+                    kind: "path-conflict",
+                    message: "x".into(),
+                },
+                INVALID,
             ),
             (
                 ToolkitError::TemplateFormUnsupportedShape {

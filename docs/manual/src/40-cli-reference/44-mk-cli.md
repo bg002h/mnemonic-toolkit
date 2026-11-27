@@ -261,10 +261,10 @@ mk repair [OPTIONS] [MK1_STRINGS]...
 | Code | Meaning |
 |---|---|
 | `0` | all strings already valid (no repair applied; input echoed to stdout unchanged) |
-| `16` | at least one string corrected (`REPAIR_APPLIED`), and the corrected group decodes; stdout = repair report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card: fewer chunks than the set holds, each index given once and inside the set), stderr additionally carries a `warning:` line saying the correction is verifiable when the rest of the set is reassembled, and telling you to run `mk decode` with every chunk — see [Set-level re-verify](#set-level-re-verify) below. A clean incomplete group is echoed at `0` |
+| `16` | at least one string corrected (`REPAIR_APPLIED`), and the corrected group decodes; stdout = repair report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card: fewer chunks than the set holds, each index given once and inside the set), stderr additionally carries a `warning:` line saying the correction is verifiable when the rest of the set is reassembled, and telling you to run `mk decode` with every chunk — see [Set-level re-verify](#set-level-re-verify) below. A clean incomplete group is echoed at `0`. Short groups under different `chunk_set_id`s that declare one size and together cover every index of it are not incomplete: they are refused (`2`) |
 | `18` | `16 + 2`: a corrected group that decodes to a card that then fails validation (`KeyCard::validate`). It is printed, with an error line; a clean card that fails validation is printed at `2`. (`mnemonic repair --mk1` does not run this check yet; see [Appendix J](#appendix-j-exit-codes).) |
 | `22` | `16 + 4 + 2`: a corrected string that is not a card — a corrected single (not chunked) string that does not decode, or a corrected string whose chunk header does not parse as an mk1 chunk. It is still printed, with an error line telling you not to trust it. (A corrected single string that decodes, `20`, cannot occur in mk: a single string cannot hold a 65-byte xpub.) |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch); a clean string `mk decode` rejects, or a clean string whose chunk header does not parse; a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below); **or** a malformed group: an index given twice, an index outside the set, more chunks than the set declares, or chunks that disagree on the set's size. Nothing is printed, and the reason is on stderr |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch); a clean string `mk decode` rejects, or a clean string whose chunk header does not parse; a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below); **or** a malformed group: an index given twice, an index outside the set, more chunks than the set declares, or chunks that disagree on the set's size; **or** short groups under different `chunk_set_id`s that declare one size and together cover every index of it (a suspected miscorrection of a set id, or chunks of two cards mixed). Nothing is printed, and the reason is on stderr |
 | `32` | a file or stream could not be read or written |
 | `64` | the command line is wrong; nothing ran |
 
@@ -276,7 +276,8 @@ build). Bit 16 means a correction
 was applied: it is **verified now** (a complete, cleanly-reassembling
 `chunk_set_id` group) or **verifiable by reassembly later** (an
 incomplete group, whose `warning:` line tells you to reassemble the
-full card). A corrected single (not chunked) string that does not decode
+full card; short groups under different set ids that together cover
+every index of one size are refused, `2`, instead). A corrected single (not chunked) string that does not decode
 is printed at `22`; a chunked set of one follows the complete-set rule
 (`2`, nothing printed). See
 [Appendix J](#appendix-j-exit-codes).
@@ -325,6 +326,15 @@ reporting a confident fix:
   outside the set, more chunks than the set declares, or chunks that
   disagree on its size): exit `2`, nothing printed, the reason on
   stderr. Such a group is not an incomplete set.
+- **Short groups under different `chunk_set_id`s cover one set**: two
+  or more incomplete groups that declare the same size and whose
+  indices together cover every index of it (overlap allowed) are a
+  suspected miscorrection of a set id, or chunks of two cards mixed
+  (`md` refuses chunks of two cards the same way): exit `2`, nothing
+  printed, clean or corrected. Groups that declare different sizes never
+  combine, and a complete card in the same batch never counts: a whole
+  card beside a lone chunk of another card is a card plus an incomplete
+  set.
 
 BIP-93 itself recommends confirming a corrected codex32 string before
 relying on it; this advisory operationalizes that recommendation for
