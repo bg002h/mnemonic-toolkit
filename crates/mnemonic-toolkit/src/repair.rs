@@ -124,6 +124,17 @@ pub(crate) fn classify_hrp_prefix(s: &str) -> Result<CardKind, ToolkitError> {
     }
 }
 
+/// HRPs an `HrpMismatch` may name: the constellation's card HRPs and the
+/// Bitcoin address HRPs. Any other prefix is withheld from the message.
+const ECHOABLE_HRPS: &[&str] = &["ms", "mk", "md", "mt", "mr", "bc", "tb", "bcrt"];
+
+/// May an error message name this found HRP? Only a known HRP or a one-letter
+/// typo of a card HRP; anything else may be the start of a secret typed into
+/// the wrong field, so it is withheld.
+pub(crate) fn hrp_is_echoable(found: &str) -> bool {
+    ECHOABLE_HRPS.contains(&found) || suggest_hrp(found).is_some()
+}
+
 /// v0.24.0 §2.C.1 (D34/I5 fold) — per-flag HRP validation. Used by
 /// `repair::run` / `inspect::run` / `verify_bundle::run` to reject a typed
 /// `--ms1` / `--mk1` / `--md1` flag whose value's HRP prefix does not match
@@ -187,11 +198,17 @@ pub(crate) fn validate_flag_hrp(
     // `1` separator (BIP-173: the data charset excludes `1`, so the last `1`
     // is the separator) from the lowercased value for a clean error message
     // (lowercasing keeps `--ms1 MK1xxx` reading "expected 'ms', got 'mk'").
+    //
+    // The prefix is echoed ONLY when it is a known card or address HRP: the
+    // value is often a secret typed into the wrong field (a BIP-39 phrase
+    // pasted into `--ms1` has no `1`, so the whole phrase used to be echoed,
+    // even when it arrived on stdin). Anything else is withheld (`got` empty).
     let lower = value.to_lowercase();
     let got_hrp = lower
         .rfind('1')
         .map(|i| lower[..i].to_string())
-        .unwrap_or(lower);
+        .filter(|h| ECHOABLE_HRPS.contains(&h.as_str()))
+        .unwrap_or_default();
     Err(ToolkitError::HrpMismatch {
         flag,
         expected: canonical,
@@ -622,12 +639,21 @@ impl std::fmt::Display for RepairError {
         match self {
             RepairError::EmptyInput => write!(f, "repair: no chunks supplied"),
             RepairError::HrpMismatch { chunk_index, expected, found } => {
-                let suggestion_suffix = suggest_hrp(found)
+                let suggestion = suggest_hrp(found);
+                let suggestion_suffix = suggestion
                     .map(|s| format!("; did you mean '{s}'?"))
                     .unwrap_or_default();
+                // Name the found prefix only when it is a known HRP or a
+                // one-letter typo of one: the chunk may be a secret typed
+                // into the wrong field, and anything else is withheld.
+                let shown = if hrp_is_echoable(found) {
+                    format!("found '{found}'")
+                } else {
+                    "found a prefix that is not a card HRP (input withheld)".to_string()
+                };
                 write!(
                     f,
-                    "repair: chunk {chunk_index} HRP mismatch — expected '{expected}', found '{found}' (HRP is not BCH-protected; re-type the prefix){suggestion_suffix}"
+                    "repair: chunk {chunk_index} HRP mismatch — expected '{expected}', {shown} (HRP is not BCH-protected; re-type the prefix){suggestion_suffix}"
                 )
             }
             RepairError::IndelUnrecoverable { hrp, max_indel } => write!(
@@ -3298,6 +3324,46 @@ mod tests {
     /// (ms-codec caps `WrongHrp.got` to 4 chars at construction so the error
     /// can't echo a long secret prefix into logs/output). A pre-0.4.4 codec
     /// echoed the whole input here. The toolkit inherits the cap for free.
+    /// Review (address-of-seed GUI measurement, fable M1): a value typed
+    /// into an ms1 field that is not an ms1 card is withheld from the
+    /// HrpMismatch message; a known HRP or a one-letter typo is still named.
+    #[test]
+    fn hrp_mismatch_withholds_a_secret_typed_into_the_ms1_field() {
+        let phrase = "abandon abandon abandon abandon abandon abandon abandon \
+                      abandon abandon abandon abandon about";
+        for v in [phrase, "7f1f7f7f7f7f7f7f", "secretword1qqqq"] {
+            let e = validate_flag_hrp("--ms1", "ms", v).unwrap_err();
+            let m = e.to_string();
+            assert!(m.contains("input withheld"), "{m}");
+            for word in ["abandon", "7f", "secretword"] {
+                assert!(!m.contains(word), "{v:?} leaked into {m}");
+            }
+        }
+        let m = validate_flag_hrp("--ms1", "ms", "mk1qqqq")
+            .unwrap_err()
+            .to_string();
+        assert!(m.contains("got 'mk'"), "{m}");
+        for found in ["7f", "aban", "secretword"] {
+            let m = RepairError::HrpMismatch {
+                chunk_index: 0,
+                expected: "ms",
+                found: found.into(),
+            }
+            .to_string();
+            assert!(!m.contains(found) && m.contains("input withheld"), "{m}");
+        }
+        let m = RepairError::HrpMismatch {
+            chunk_index: 0,
+            expected: "ms",
+            found: "ns".into(),
+        }
+        .to_string();
+        assert!(
+            m.contains("found 'ns'") && m.contains("did you mean 'ms'"),
+            "{m}"
+        );
+    }
+
     #[test]
     fn repair_via_ms_codec_wrong_hrp_found_is_bounded() {
         // 8 codex32-alphabet chars, no `'1'` → ms-codec WrongHrp{got: "qpzr"}.

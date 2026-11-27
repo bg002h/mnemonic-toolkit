@@ -4111,7 +4111,7 @@ better data for the failing chunk.
 | Trigger | Refusal |
 |---|---|
 | `chunk_index N` has more than 4 substitutions | `repair: chunk N has too many errors to correct uniquely (exceeds singleton bound = 8); cannot suggest correction` |
-| `chunk_index N` HRP is not the expected one | `repair: chunk N HRP mismatch — expected 'XX', found 'YY' (HRP is not BCH-protected; re-type the prefix)` |
+| `chunk_index N` HRP is not the expected one | `repair: chunk N HRP mismatch — expected 'XX', found 'YY' (HRP is not BCH-protected; re-type the prefix)`. `YY` is named only when it is a known HRP or a one-letter typo of one; any other prefix reads `found a prefix that is not a card HRP (input withheld)`, since it may be the start of a secret typed into the wrong field. |
 | `chunk_index N` data-part length is 94 or 95 | `repair: chunk N data-part length L is in BIP-93's reserved-invalid band [94, 95]; re-type the chunk` |
 | `chunk_index N` data-part length triggers long code for an HRP whose codec doesn't define one (`ms` / `md`) | `repair: chunk N data-part length L would require the long BCH code, which is not defined for HRP 'X' in this codec version` |
 | No chunks supplied | `repair: no chunks supplied` |

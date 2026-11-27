@@ -95,8 +95,12 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
             )
         }
         ms_codec::Error::Codex32(c) => format!("ms1 codex32: {:?}", c),
-        ms_codec::Error::WrongHrp { got } => {
+        ms_codec::Error::WrongHrp { got } if crate::repair::hrp_is_echoable(got) => {
             format!("ms1 wrong HRP: got {:?}, expected \"ms\"", got)
+        }
+        ms_codec::Error::WrongHrp { .. } => {
+            "ms1 wrong HRP: expected \"ms\"; the value does not start with \"ms1\" (input withheld)"
+                .to_string()
         }
         ms_codec::Error::ThresholdNotZero { got } => format!(
             "ms1 threshold not 0 (got '{}'); v0.1 single-string only",
@@ -524,6 +528,13 @@ mod tests {
     fn bip39_unknown_word_mentions_language() {
         let m = friendly_bip39(&bip39::Error::UnknownWord(5));
         assert!(m.contains("--language"));
+    }
+
+    #[test]
+    fn ms_codec_wrong_hrp_withholds_a_non_hrp_prefix() {
+        let m = friendly_ms_codec(&ms_codec::Error::WrongHrp { got: "aban".into() });
+        assert!(!m.contains("aban"), "{m}");
+        assert!(m.contains("input withheld"), "{m}");
     }
 
     #[test]

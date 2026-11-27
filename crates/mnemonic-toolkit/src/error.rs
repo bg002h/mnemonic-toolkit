@@ -911,6 +911,10 @@ impl ToolkitError {
                 "{} reserved-not-emitted: {}; deferred to v0.2+",
                 source, detail,
             ),
+            ToolkitError::HrpMismatch { flag, expected, got } if got.is_empty() => format!(
+                "{flag} expects a value with HRP '{expected}', and this value does not start \
+                 with '{expected}1' (input withheld; HRP is not BCH-protected; re-type the prefix)"
+            ),
             ToolkitError::HrpMismatch { flag, expected, got } => {
                 format!(
                     "{flag} expects a value with HRP '{expected}', got '{got}' \

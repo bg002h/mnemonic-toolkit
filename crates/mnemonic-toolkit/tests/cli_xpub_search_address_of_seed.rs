@@ -1917,6 +1917,50 @@ fn second_stdin_reader_via_descriptor_from_md1() {
     assert!(o.stderr.contains("stdin"), "{}", o.stderr);
 }
 
+/// Review (GUI measurement, fable M3): `--descriptor-file /dev/stdin` reads
+/// stdin too. Before this, with the descriptor on stdin and the passphrase
+/// on `--passphrase-stdin`, the descriptor read drained stdin and the search
+/// ran with the EMPTY passphrase (exit 0, the wrong wallet).
+#[test]
+fn second_stdin_reader_via_descriptor_file_dev_stdin() {
+    for path in ["/dev/stdin", "/dev/fd/0", "/proc/self/fd/0"] {
+        let o = run_with(
+            &[
+                "--from",
+                "phrase=@env:SEED_A",
+                "--passphrase-stdin",
+                "--descriptor-file",
+                path,
+                "--target-address",
+                S1,
+            ],
+            &envs(),
+            Some("wpkh(@0/<0;1>/*)\n"),
+        );
+        assert_eq!(o.code, 2, "{path}: {}", o.stderr);
+        assert!(
+            o.stderr.contains("--descriptor-file") && o.stderr.contains("stdin"),
+            "{path}: {}",
+            o.stderr
+        );
+    }
+}
+
+/// Review (GUI measurement, fable M1): a seed phrase typed into the ms1
+/// slot is not echoed by the HRP error, on any spelling.
+#[test]
+fn ms1_slot_holding_a_phrase_is_not_echoed() {
+    for (args, stdin) in [
+        (vec!["--ms1-stdin", "--target-address", S1], Some(A)),
+        (vec!["--ms1", "@env:SEED_A", "--target-address", S1], None),
+    ] {
+        let o = run_with(&args, &envs(), stdin);
+        assert_ne!(o.code, 0, "{}", o.stderr);
+        assert!(!o.stderr.contains("abandon"), "{}", o.stderr);
+        assert!(!o.stdout.contains("abandon"), "{}", o.stdout);
+    }
+}
+
 #[test]
 fn one_unplaced_mk1_cosigner_across_three_slots() {
     let p = "m/48'/0'/0'/2'";

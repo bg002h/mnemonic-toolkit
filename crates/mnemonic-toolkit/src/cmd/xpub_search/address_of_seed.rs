@@ -447,6 +447,12 @@ pub fn run_address_of_seed<R: Read, W: Write, E: Write>(
             args.descriptor_from.iter().any(|d| d == "md1=-"),
             "--descriptor-from md1=-".into(),
         ),
+        (
+            args.descriptor_file
+                .as_deref()
+                .is_some_and(crate::passphrase_input::path_is_stdin),
+            "--descriptor-file".into(),
+        ),
     ];
     for (i, s) in from_stdin.iter().enumerate() {
         readers.push((*s, format!("--from #{i} =-")));
