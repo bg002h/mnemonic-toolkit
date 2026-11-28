@@ -846,6 +846,7 @@ pub mod texts {
 
     /// TX-S key form. `path_phrase` is "<who>'s path <path> is a <pclass> path"
     /// (or its plural); `key_phrase` "<who> is a <kclass> key" (or plural).
+    #[allow(clippy::too_many_arguments)]
     pub fn s_key(
         path_phrase: &str,
         pclass: Class,
@@ -1480,6 +1481,116 @@ pub fn take_tx_r() -> Option<Line> {
         .cloned()
 }
 
+/// A decoded xpub as a key: its class, its prefix as typed in `raw` (the
+/// first token there with the same key data; else `xpub`/`tpub`), and the
+/// coin of an origin the input carries (B1) as `KeyCoin{OwnKey}`.
+pub fn xpub_key_source(
+    who: Who,
+    xpub: &bitcoin::bip32::Xpub,
+    raw: &str,
+    origin: Option<&bitcoin::bip32::DerivationPath>,
+) -> KeySource {
+    let class = Class::of_kind(xpub.network);
+    let data = key_data(xpub);
+    let pfx = raw_prefixes(raw)
+        .into_iter()
+        .find(|(d, _)| *d == data)
+        .map(|(_, p)| p)
+        .unwrap_or_else(|| default_pfx(class).to_string());
+    KeySource {
+        who,
+        pfx,
+        class,
+        coins: origin
+            .and_then(|p| key_coin(PathWho::OwnKey, p))
+            .into_iter()
+            .collect(),
+    }
+}
+
+/// An mk1 card as a key: its version class, the decoded xpub's prefix, and
+/// the card's own origin coin as `KeyCoin{OwnKey}` (B1).
+pub fn mk1_key_source(who: Who, card: &mk_codec::KeyCard) -> KeySource {
+    let text = card.xpub.to_string();
+    KeySource {
+        who,
+        pfx: text.chars().take(4).collect(),
+        class: Class::of_kind(card.xpub.network),
+        coins: key_coin(PathWho::OwnKey, &card.origin_path)
+            .into_iter()
+            .collect(),
+    }
+}
+
+/// The sources of `--slot @N.<subkey>=` inputs (export-wallet, bundle), in
+/// slot order: `@N.xpub` and `@N.master_xpub` are keys (prefix as typed), a
+/// typed `@N.path` is a coin on the slot's xpub (key form) or, for a seed
+/// slot, a coin with no key (run form); `@N.wif` is a WIF. A path the slot
+/// does not type is no source (B1). Values read from stdin (`-`) and values
+/// that do not parse are left to the verb's own checks.
+pub(crate) fn slot_sources(slots: &[crate::slot_input::SlotInput]) -> Vec<Source> {
+    use crate::slot_input::SlotSubkey as K;
+    use std::str::FromStr;
+    let mut indices: Vec<u8> = slots.iter().map(|s| s.index).collect();
+    indices.sort_unstable();
+    indices.dedup();
+    let mut out = Vec::new();
+    for idx in indices {
+        let get = |k: K| -> Option<&str> {
+            slots
+                .iter()
+                .find(|s| s.index == idx && s.subkey == k)
+                .map(|s| &*s.value)
+                .filter(|v| *v != "-")
+        };
+        let flag = format!("--slot @{idx}.path");
+        let coin = get(K::Path)
+            .and_then(|p| bitcoin::bip32::DerivationPath::from_str(p).ok())
+            .and_then(|p| key_coin(PathWho::Flag(flag.clone()), &p));
+        let mut coin_used = false;
+        for (k, name) in [(K::Xpub, "xpub"), (K::Xprv, "xprv")] {
+            if let Some(v) = get(k) {
+                let coins: Vec<KeyCoin> = coin.clone().into_iter().collect();
+                coin_used = true;
+                if let Some(ks) =
+                    KeySource::from_text(Who::plain(format!("--slot @{idx}.{name}")), v, coins)
+                {
+                    out.push(Source::Key(ks));
+                }
+            }
+        }
+        if let Some(v) = get(K::MasterXpub) {
+            if let Some(ks) =
+                KeySource::from_text(Who::plain(format!("--slot @{idx}.master_xpub")), v, vec![])
+            {
+                out.push(Source::Key(ks));
+            }
+        }
+        if let Some(v) = get(K::Wif) {
+            // Only the version byte is kept; the decoded buffer is scrubbed.
+            if let Ok(data) = bitcoin::base58::decode_check(v).map(zeroize::Zeroizing::new) {
+                match data.first() {
+                    Some(128) => out.push(Source::Wif {
+                        class: Class::Main,
+                        version: 128,
+                    }),
+                    Some(239) => out.push(Source::Wif {
+                        class: Class::Test,
+                        version: 239,
+                    }),
+                    _ => {}
+                }
+            }
+        }
+        if !coin_used {
+            if let Some(c) = coin {
+                out.push(Source::Coin(c));
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1794,87 +1905,4 @@ mod tests {
             Some(AddrNet::B58(Class::Test))
         );
     }
-}
-
-/// An mk1 card as a key: its version class, the decoded xpub's prefix, and
-/// the card's own origin coin as `KeyCoin{OwnKey}` (B1).
-pub fn mk1_key_source(who: Who, card: &mk_codec::KeyCard) -> KeySource {
-    let text = card.xpub.to_string();
-    KeySource {
-        who,
-        pfx: text.chars().take(4).collect(),
-        class: Class::of_kind(card.xpub.network),
-        coins: key_coin(PathWho::OwnKey, &card.origin_path)
-            .into_iter()
-            .collect(),
-    }
-}
-
-/// The sources of `--slot @N.<subkey>=` inputs (export-wallet, bundle), in
-/// slot order: `@N.xpub` and `@N.master_xpub` are keys (prefix as typed), a
-/// typed `@N.path` is a coin on the slot's xpub (key form) or, for a seed
-/// slot, a coin with no key (run form); `@N.wif` is a WIF. A path the slot
-/// does not type is no source (B1). Values read from stdin (`-`) and values
-/// that do not parse are left to the verb's own checks.
-pub(crate) fn slot_sources(slots: &[crate::slot_input::SlotInput]) -> Vec<Source> {
-    use crate::slot_input::SlotSubkey as K;
-    use std::str::FromStr;
-    let mut indices: Vec<u8> = slots.iter().map(|s| s.index).collect();
-    indices.sort_unstable();
-    indices.dedup();
-    let mut out = Vec::new();
-    for idx in indices {
-        let get = |k: K| -> Option<&str> {
-            slots
-                .iter()
-                .find(|s| s.index == idx && s.subkey == k)
-                .map(|s| &*s.value)
-                .filter(|v| *v != "-")
-        };
-        let flag = format!("--slot @{idx}.path");
-        let coin = get(K::Path)
-            .and_then(|p| bitcoin::bip32::DerivationPath::from_str(p).ok())
-            .and_then(|p| key_coin(PathWho::Flag(flag.clone()), &p));
-        let mut coin_used = false;
-        for (k, name) in [(K::Xpub, "xpub"), (K::Xprv, "xprv")] {
-            if let Some(v) = get(k) {
-                let coins: Vec<KeyCoin> = coin.clone().into_iter().collect();
-                coin_used = true;
-                if let Some(ks) =
-                    KeySource::from_text(Who::plain(format!("--slot @{idx}.{name}")), v, coins)
-                {
-                    out.push(Source::Key(ks));
-                }
-            }
-        }
-        if let Some(v) = get(K::MasterXpub) {
-            if let Some(ks) =
-                KeySource::from_text(Who::plain(format!("--slot @{idx}.master_xpub")), v, vec![])
-            {
-                out.push(Source::Key(ks));
-            }
-        }
-        if let Some(v) = get(K::Wif) {
-            // Only the version byte is kept; the decoded buffer is scrubbed.
-            if let Ok(data) = bitcoin::base58::decode_check(v).map(zeroize::Zeroizing::new) {
-                match data.first() {
-                    Some(128) => out.push(Source::Wif {
-                        class: Class::Main,
-                        version: 128,
-                    }),
-                    Some(239) => out.push(Source::Wif {
-                        class: Class::Test,
-                        version: 239,
-                    }),
-                    _ => {}
-                }
-            }
-        }
-        if !coin_used {
-            if let Some(c) = coin {
-                out.push(Source::Coin(c));
-            }
-        }
-    }
-    out
 }

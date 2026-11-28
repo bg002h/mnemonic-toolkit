@@ -44,7 +44,7 @@ use super::{
 use crate::error::ToolkitError;
 use crate::parse_descriptor;
 use crate::synthesize::{xpub_to_65, ResolvedSlot};
-use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
 use regex::Regex;
 use std::io::Write;
 use std::str::FromStr;
@@ -242,11 +242,7 @@ impl WalletFormatParser for BsmsParser {
         // SPEC §4.2 step 8: network detection via BIP-48 coin-type
         // (hardened component index 1) on the FIRST cosigner. Cosigner-to-
         // cosigner heterogeneity → ImportWalletParse.
-        let origins = crate::wallet_import::pipeline::extract_origin_components(
-            descriptor_body_no_csum,
-            "bsms",
-        )?;
-        let network = network_from_origins(&origins)?;
+        let network = bitcoin::Network::Bitcoin; // placeholder: `import_wallet` sets the run network after the network rule (Spec B unit 3);
 
         // SPEC §4.2 step 9: build ResolvedSlot vec per cosigner; entropy=None.
         let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(parsed_keys.len());
@@ -268,89 +264,10 @@ impl WalletFormatParser for BsmsParser {
 
         validate_watch_only_resolved(&cosigners)?;
 
-        // cycle-5 S-NET (axis 2 / H15 = L10): xpub-version vs coin-type cross-check.
-        crate::wallet_import::pipeline::assert_slots_network_agrees(
-            &cosigners,
-            network,
-            "import: bsms",
-        )?;
-
         let threshold = extract_threshold(descriptor_body_no_csum)?;
 
-        // SPEC §4.1 — first-address verification. v0.27.0 wires in the
-        // toolkit-side derivation at canonical /0/0 via
-        // `crate::derive_address::derive_first_address` and compares against
-        // `audit.first_address` (6-line shape only; the 2-line shape carries
-        // no audit fields). Mismatch is informational (stderr WARNING; not
-        // hard-error) per BIP-129 §6's coordinator-output self-consistency
-        // intent. Closes FOLLOWUP `bsms-first-address-verify`.
-        if let Some(ref a) = audit {
-            // Re-parse the descriptor string so we can derive against a
-            // miniscript `Descriptor` value. The earlier `parse_descriptor`
-            // returns the toolkit's `md_codec::Descriptor`, which carries
-            // the canonical-form bytes; for first-address derivation we
-            // need a `miniscript::Descriptor` over `DescriptorPublicKey`.
-            // We use the user-supplied checksum-stripped body — taproot
-            // descriptors are accepted at parse time (network detection +
-            // checksum + xpub parse are all script-type-agnostic), but
-            // address derivation via `derive_first_address` is non-taproot
-            // by contract; we therefore skip the WARNING for taproot.
-            use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
-            // SPEC bip388-double-star-shorthand-support §0 item 4 (soft gap):
-            // this `from_str` re-parses the RAW concrete body directly (not
-            // the `@N`-placeholder form the main parse used), so a literal
-            // `/**` needs its own expansion here too — otherwise the `if let
-            // Ok` silently SKIPS the first-address check on `/**` input
-            // (the main parse above already accepts it via
-            // `parse_descriptor`'s chokepoint).
-            let expanded_body =
-                crate::parse_descriptor::expand_literal_double_star(descriptor_body_no_csum);
-            if let Ok(parsed) =
-                MsDescriptor::<DescriptorPublicKey>::from_str(expanded_body.as_ref())
-            {
-                let is_taproot = matches!(parsed, MsDescriptor::Tr(_));
-                if !is_taproot {
-                    match crate::derive_address::derive_first_address(&parsed, network) {
-                        Ok(computed) if computed == a.first_address => {
-                            // Match: silent. The audit field is consistent
-                            // with the toolkit-derived address.
-                        }
-                        Ok(computed) => {
-                            // SPEC §2.4 row 3 template (restored at v0.27.0
-                            // Phase 3; FOLLOWUP `bsms-first-address-verify`
-                            // body line 2091). `at path <P>` segment sources
-                            // from the audit's declared derivation_path.
-                            writeln!(
-                                stderr,
-                                "warning: import-wallet: bsms: first-address mismatch at path {path}: computed {computed}, blob declares {declared}",
-                                path = a.derivation_path,
-                                computed = computed,
-                                declared = a.first_address,
-                            )
-                            .map_err(ToolkitError::Io)?;
-                        }
-                        Err(e) => {
-                            // v0.27.0 Phase 6.5 PR-review I3 fold:
-                            // surface derivation failure as a stderr
-                            // NOTICE rather than silently conflating it
-                            // with a match. The user opted into BSMS
-                            // first-address verify by including the
-                            // 6-line audit fields; they deserve to know
-                            // it was skipped. Downstream parse already
-                            // validated the descriptor structurally, so
-                            // this remains non-fatal.
-                            writeln!(
-                                stderr,
-                                "notice: import-wallet: bsms: first-address verify could not run: {e}; \
-                                 audit.first_address={declared} preserved verbatim in envelope",
-                                declared = a.first_address,
-                            )
-                            .map_err(ToolkitError::Io)?;
-                        }
-                    }
-                }
-            }
-        }
+        // The first-address audit (SPEC §4.1) runs in `first_address_audit`,
+        // after the network rule, on the run network (Spec B unit 3).
 
         Ok(vec![ParsedImport {
             descriptor,
@@ -364,6 +281,78 @@ impl WalletFormatParser for BsmsParser {
             },
         }])
     }
+}
+
+/// SPEC §4.1 — BSMS first-address verification, on the RUN network (Spec B
+/// unit 3: the parser no longer infers one). `import_wallet` calls it after
+/// the network rule passed for `p`, for a shape whose provenance carries a
+/// declared address (the 6-line and 4-line shapes). Mismatch is informational
+/// (stderr WARNING; not hard-error) per BIP-129 §6's coordinator-output
+/// self-consistency intent. Closes FOLLOWUP `bsms-first-address-verify`.
+pub(crate) fn first_address_audit(
+    p: &ParsedImport,
+    network: bitcoin::Network,
+    stderr: &mut dyn Write,
+) -> Result<(), ToolkitError> {
+    let Some(a) = p.bsms_audit() else {
+        return Ok(());
+    };
+    // The body without its BIP-380 `#checksum` (the re-parse below takes the
+    // bare body; a checksummed one would not parse after `/**` expansion).
+    let descriptor_body_no_csum = p
+        .original_descriptor
+        .split_once('#')
+        .map_or(p.original_descriptor.as_str(), |(body, _)| body);
+    // Re-parse the descriptor string so we can derive against a
+    // miniscript `Descriptor` value. The earlier `parse_descriptor`
+    // returns the toolkit's `md_codec::Descriptor`, which carries
+    // the canonical-form bytes; for first-address derivation we
+    // need a `miniscript::Descriptor` over `DescriptorPublicKey`.
+    // Taproot descriptors are accepted at parse time, but address
+    // derivation via `derive_first_address` is non-taproot by contract;
+    // we therefore skip the WARNING for taproot.
+    use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
+    // SPEC bip388-double-star-shorthand-support §0 item 4 (soft gap):
+    // this `from_str` re-parses the RAW concrete body directly (not
+    // the `@N`-placeholder form the main parse used), so a literal
+    // `/**` needs its own expansion here too — otherwise the `if let
+    // Ok` silently SKIPS the first-address check on `/**` input.
+    let expanded_body =
+        crate::parse_descriptor::expand_literal_double_star(descriptor_body_no_csum);
+    if let Ok(parsed) = MsDescriptor::<DescriptorPublicKey>::from_str(expanded_body.as_ref()) {
+        let is_taproot = matches!(parsed, MsDescriptor::Tr(_));
+        if !is_taproot {
+            match crate::derive_address::derive_first_address(&parsed, network) {
+                Ok(computed) if computed == a.first_address => {
+                    // Match: silent.
+                }
+                Ok(computed) => {
+                    // SPEC §2.4 row 3 template. `at path <P>` segment sources
+                    // from the audit's declared derivation_path.
+                    writeln!(
+                        stderr,
+                        "warning: import-wallet: bsms: first-address mismatch at path {path}: computed {computed}, blob declares {declared}",
+                        path = a.derivation_path,
+                        computed = computed,
+                        declared = a.first_address,
+                    )
+                    .map_err(ToolkitError::Io)?;
+                }
+                Err(e) => {
+                    // Surface derivation failure as a stderr NOTICE rather
+                    // than silently conflating it with a match.
+                    writeln!(
+                        stderr,
+                        "notice: import-wallet: bsms: first-address verify could not run: {e}; \
+                         audit.first_address={declared} preserved verbatim in envelope",
+                        declared = a.first_address,
+                    )
+                    .map_err(ToolkitError::Io)?;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Per SPEC §4.2 step 9: drop trailing empty entries produced by a trailing
@@ -392,60 +381,6 @@ fn build_slot_fields(
         ))
     })?;
     crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xpub_str, "bsms")
-}
-
-/// SPEC §4.2 step 8 network detection. Inspects the BIP-48 coin-type child
-/// number (path component index 1, hardened) on the first parsed origin.
-/// Returns `bitcoin::Network::Bitcoin` for hardened `0'`, `bitcoin::Network::Testnet`
-/// for hardened `1'`. Other coin-types → parse error. Cosigner-to-cosigner
-/// heterogeneity → parse error (per SPEC §4.2 step 8 locked rule).
-fn network_from_origins(
-    origins: &[(Fingerprint, DerivationPath, String)],
-) -> Result<bitcoin::Network, ToolkitError> {
-    if origins.is_empty() {
-        return Err(ToolkitError::ImportWalletParse(
-            "import-wallet: bsms: parse error: no origins to infer network from".to_string(),
-        ));
-    }
-    let coin_types: Vec<u32> = origins
-        .iter()
-        .map(|(_, p, _)| coin_type_from_path(p))
-        .collect::<Result<Vec<_>, _>>()?;
-    let first = coin_types[0];
-    for (i, ct) in coin_types.iter().enumerate().skip(1) {
-        if *ct != first {
-            return Err(ToolkitError::ImportWalletParse(format!(
-                "import-wallet: bsms: cosigner {i} has coin-type {ct}, cosigner 0 has coin-type {first}; all cosigners must share a coin-type"
-            )));
-        }
-    }
-    match first {
-        0 => Ok(bitcoin::Network::Bitcoin),
-        1 => Ok(bitcoin::Network::Testnet),
-        other => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: bsms: parse error: unsupported coin-type {other} on origin path; only 0 (mainnet) and 1 (testnet) supported per BIP-48"
-        ))),
-    }
-}
-
-fn coin_type_from_path(path: &DerivationPath) -> Result<u32, ToolkitError> {
-    let comps: Vec<&ChildNumber> = path.into_iter().collect();
-    if comps.len() < 2 {
-        return Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: bsms: parse error: origin path has only {} components; need ≥2 for BIP-48 coin-type inference",
-            comps.len()
-        )));
-    }
-    // BIP-48 path: m / purpose' / coin_type' / ...
-    // We accept any purpose value (44'/45'/48'/49'/84'/86') because v0.26.0
-    // import accepts heterogeneous singlesig + multisig BIP families; the
-    // network inference is gated only on coin-type (index 1).
-    match comps[1] {
-        ChildNumber::Hardened { index } => Ok(*index),
-        ChildNumber::Normal { index } => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: bsms: parse error: coin-type component {index} is not hardened; BIP-48 requires `<coin_type>'`"
-        ))),
-    }
 }
 
 /// Extract the K from `thresh(K, ...)` / `multi(K, ...)` / `sortedmulti(K, ...)`
@@ -625,6 +560,10 @@ mod tests {
             "4-line parse succeeds even with first-address mismatch (SPEC §10.2 informational)",
         );
         assert_eq!(parsed.len(), 1);
+        // Spec B unit 3: the audit runs after the network rule, on the run
+        // network (`first_address_audit`), not inside the parser.
+        assert!(!String::from_utf8_lossy(&stderr).contains("first-address mismatch"));
+        first_address_audit(&parsed[0], bitcoin::Network::Bitcoin, &mut stderr).unwrap();
         let stderr_str = String::from_utf8_lossy(&stderr);
         assert!(
             stderr_str.contains("first-address mismatch"),

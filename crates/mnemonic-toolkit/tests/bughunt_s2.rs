@@ -459,7 +459,11 @@ fn bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet() {
         a.push("--json");
         mn(&a)
     };
-    let imported = import(None);
+    // Spec B unit 3 (R3.9): the run is `--network` or mainnet, so the
+    // testnet blob is imported on `--network testnet` (with no flag its
+    // tpubs are refused, exit 8).
+    assert_eq!(import(None).status.code(), Some(8));
+    let imported = import(Some("testnet"));
     assert!(
         imported.status.success(),
         "import-wallet: {}",

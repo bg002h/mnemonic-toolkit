@@ -9,7 +9,7 @@
 //!
 //! ```json
 //! {
-//!   "chain": "BTC"   // or "XTN"
+//!   "chain": "BTC"   // or "XTN", "XRT"
 //!   "xfp": "<8-hex-uppercase-master-fingerprint>",
 //!   "xpub": "<optional-master-xpub>",
 //!   "account": <u32 account number>,
@@ -29,12 +29,13 @@
 //! - Q (2024+): adds `bip48_1`/`bip48_2` multisig hints.
 //!
 //! Sniff signature (SPEC §11.3 Q3 lock, R0 I8 relaxed): top-level JSON
-//! object with `chain ∈ {BTC, XTN}` + `xfp` + at-least-one-of
+//! object with `chain ∈ {BTC, XTN, XRT}` + `xfp` + at-least-one-of
 //! `{xpub, bip44, bip49, bip84, bip86, bip48_1, bip48_2}`.
 //!
 //! Parse contract:
 //! 1. JSON-parse + top-level object check.
-//! 2. Extract `chain` → network (BTC → mainnet, XTN → testnet).
+//! 2. Extract `chain`, a stated network (BTC mainnet; XTN and XRT a test
+//!    network) that the network rule checks against the keys and the run.
 //! 3. Extract `xfp` → master fingerprint.
 //! 4. Dominant-BIP selection per SPEC §11.3.1: bip86 > bip84 > bip49 > bip44
 //!    (with top-level `xpub` legacy-firmware fallback inferring BIP from
@@ -64,11 +65,13 @@ use std::io::Write;
 /// SPEC §11.3 — Coldcard single-sig wallet.json parser.
 pub(crate) struct ColdcardParser;
 
-/// SPEC §11.3 — `chain` field discriminator. `BTC` → mainnet, `XTN` → testnet.
+/// SPEC §11.3 — `chain` field discriminator. `BTC` → mainnet, `XTN` → testnet,
+/// `XRT` → regtest (a stated network at class grain, Spec A N1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ColdcardChain {
     Btc,
     Xtn,
+    Xrt,
 }
 
 impl ColdcardChain {
@@ -77,6 +80,7 @@ impl ColdcardChain {
         match self {
             ColdcardChain::Btc => bitcoin::Network::Bitcoin,
             ColdcardChain::Xtn => bitcoin::Network::Testnet,
+            ColdcardChain::Xrt => bitcoin::Network::Regtest,
         }
     }
 }
@@ -132,7 +136,7 @@ pub(crate) const COLDCARD_PRESERVED_TOP_LEVEL_KEYS: &[&str] = &[
 
 impl WalletFormatParser for ColdcardParser {
     /// SPEC §11.3 (Q3 lock) sniff: top-level JSON object containing ALL of:
-    /// (1) `chain ∈ {"BTC", "XTN"}` as a string,
+    /// (1) `chain ∈ {"BTC", "XTN", "XRT"}` as a string,
     /// (2) `xfp` as a string,
     /// (3) at-least-one-of `{xpub, bip44, bip49, bip84, bip86, bip48_1, bip48_2}`.
     ///
@@ -152,11 +156,11 @@ impl WalletFormatParser for ColdcardParser {
             Some(o) => o,
             None => return false,
         };
-        // (1) chain: must be string "BTC" or "XTN".
+        // (1) chain: must be string "BTC", "XTN" or "XRT".
         let chain_ok = obj
             .get("chain")
             .and_then(|v| v.as_str())
-            .map(|s| s == "BTC" || s == "XTN")
+            .map(|s| s == "BTC" || s == "XTN" || s == "XRT")
             .unwrap_or(false);
         if !chain_ok {
             return false;
@@ -181,7 +185,7 @@ impl WalletFormatParser for ColdcardParser {
     ///
     /// Steps:
     /// 1. JSON-parse + top-level object check.
-    /// 2. Extract `chain` → network (BTC → mainnet, XTN → testnet).
+    /// 2. Extract `chain` (BTC, XTN or XRT; the network rule checks it).
     /// 3. Decode `xfp` → 4-byte master fingerprint.
     /// 4. Extract optional `account` (default 0).
     /// 5. Dominant-BIP selection per SPEC §11.3.1:
@@ -216,9 +220,10 @@ impl WalletFormatParser for ColdcardParser {
         let chain = match chain_str {
             "BTC" => ColdcardChain::Btc,
             "XTN" => ColdcardChain::Xtn,
+            "XRT" => ColdcardChain::Xrt,
             other => {
                 return Err(ToolkitError::ImportWalletParse(format!(
-                    "import-wallet: coldcard: parse error: `chain` must be \"BTC\" or \"XTN\", got {other:?}"
+                    "import-wallet: coldcard: parse error: `chain` must be \"BTC\", \"XTN\" or \"XRT\", got {other:?}"
                 )));
             }
         };
@@ -275,7 +280,7 @@ impl WalletFormatParser for ColdcardParser {
             None => {
                 let coin_type = match chain {
                     ColdcardChain::Btc => 0,
-                    ColdcardChain::Xtn => 1,
+                    ColdcardChain::Xtn | ColdcardChain::Xrt => 1,
                 };
                 let purpose = match bip_derivation {
                     ColdcardBip::Bip44 => 44,

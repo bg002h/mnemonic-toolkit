@@ -9,6 +9,12 @@
 //! Each parser gets (a) a RED test that exits 2 (silently accepted pre-fix) and
 //! (b) a positive control proving a network-CONSISTENT input still imports
 //! unchanged (the over-rejection guard).
+//!
+//! The network rule (Spec B unit 3; Spec A §4.1 "import-wallet, every
+//! parser: key version against the blob's coin type"): the contradiction is
+//! now TX-S in its key form, exit 8, stdout empty; the run is `--network` or
+//! mainnet, so a consistent test-network blob imports with `--network
+//! testnet` (R3.9: without it, its test keys contradict the mainnet run).
 
 use assert_cmd::Command;
 use miniscript::descriptor::checksum::Engine as ChecksumEngine;
@@ -61,15 +67,36 @@ fn run_fixture(format: &str, name: &str) -> std::process::Output {
 fn assert_network_mismatch(out: &std::process::Output, who: &str) {
     assert_eq!(
         out.status.code(),
-        Some(2),
-        "{who}: xpub-version-vs-coin-type mismatch must exit 2; stderr: {}",
+        Some(8),
+        "{who}: xpub-version-vs-coin-type mismatch must exit 8; stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
+    assert!(out.stdout.is_empty(), "{who}: stdout must be empty");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("network mismatch"),
-        "{who}: expected NetworkMismatch message; got: {stderr}"
+        stderr
+            .lines()
+            .any(|l| l.starts_with("error: network mismatch (coin type): ")
+                && l.contains("Nothing was written.")),
+        "{who}: expected the TX-S key-form line; got: {stderr}"
     );
+}
+
+/// Run import-wallet with the given format, stdin blob and `--network`.
+fn run_stdin_on(format: &str, blob: &str, network: &str) -> std::process::Output {
+    bin()
+        .args([
+            "import-wallet",
+            "--format",
+            format,
+            "--blob",
+            "-",
+            "--network",
+            network,
+        ])
+        .write_stdin(blob.to_string())
+        .output()
+        .expect("spawn")
 }
 
 // ── descriptor (site 1) ──────────────────────────────────────────────────────
@@ -102,7 +129,7 @@ fn descriptor_consistent_mainnet_imports() {
 #[test]
 fn descriptor_consistent_testnet_imports() {
     let blob = format!("wpkh([704c7836/84'/1'/0']{TESTNET_XPUB_A}/<0;1>/*)\n");
-    let out = run_stdin("descriptor", &blob);
+    let out = run_stdin_on("descriptor", &blob, "testnet");
     assert_eq!(out.status.code(), Some(0));
 }
 
@@ -191,7 +218,7 @@ fn bsms_consistent_testnet_imports() {
     );
     let cs = checksum(&body);
     let blob = format!("BSMS 1.0\n{body}#{cs}\n");
-    let out = run_stdin("bsms", &blob);
+    let out = run_stdin_on("bsms", &blob, "testnet");
     assert_eq!(
         out.status.code(),
         Some(0),

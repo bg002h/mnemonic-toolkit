@@ -63,7 +63,7 @@ use super::{
 use crate::error::ToolkitError;
 use crate::parse_descriptor;
 use crate::synthesize::{xpub_to_65, ResolvedSlot};
-use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
 use serde_json::Value;
 use std::io::Write;
 use std::str::FromStr;
@@ -402,18 +402,6 @@ impl WalletFormatParser for ElectrumParser {
             });
         }
         validate_watch_only_resolved(&cosigners)?;
-
-        // cycle-5 S-NET (axis 2 / H15 = L2): xpub-version vs coin-type
-        // cross-check. The single-sig path already derives `network` from the
-        // xpub version bytes (`network_from_xpub_neutral`) so this is a no-op
-        // there; the multisig path derives `network` from the coin-type only,
-        // so this aligns multi with single — a `tpub` cosigner on a mainnet
-        // coin-type path is now rejected (was silently accepted).
-        crate::wallet_import::pipeline::assert_slots_network_agrees(
-            &cosigners,
-            network,
-            "import: electrum",
-        )?;
 
         // Step 7: dropped-field detection + stderr NOTICE.
         let mut dropped_fields: Vec<String> = Vec::new();
@@ -782,27 +770,9 @@ fn build_multisig_descriptor(
         }
     }
 
-    // Uniformity-check #2: all cosigners share a coin-type (drives network).
-    let first_coin = cosigners[0].coin_type;
-    for (i, c) in cosigners.iter().enumerate().skip(1) {
-        if c.coin_type != first_coin {
-            return Err(ToolkitError::ImportWalletParse(format!(
-                "import-wallet: electrum: parse error: cosigner x{}/ has coin-type {}, cosigner x1/ has {}; all cosigners must share a coin-type",
-                i + 1,
-                c.coin_type,
-                first_coin,
-            )));
-        }
-    }
-    let network = match first_coin {
-        0 => bitcoin::Network::Bitcoin,
-        1 => bitcoin::Network::Testnet,
-        other => {
-            return Err(ToolkitError::ImportWalletParse(format!(
-                "import-wallet: electrum: parse error: unsupported coin-type {other} on cosigner origin paths; only 0 (mainnet) and 1 (testnet) supported"
-            )));
-        }
-    };
+    // The network is the run's (Spec B unit 3): each cosigner's origin coin
+    // is checked by the network rule in `import_wallet`, not inferred here.
+    let network = bitcoin::Network::Bitcoin; // placeholder: `import_wallet` sets the run network
 
     // Build inner sortedmulti(K, <co1>, <co2>, ...).
     let mut inner = format!("sortedmulti({k}");
@@ -852,8 +822,6 @@ struct MultisigCosigner {
     neutral_xpub: String,
     /// SLIP-132 variant class — drives outer wrapper script-type inference.
     variant_class: MultisigVariantClass,
-    /// BIP-43 coin-type component (index 1 in derivation) — drives network.
-    coin_type: u32,
     label: Option<String>,
 }
 
@@ -919,34 +887,18 @@ fn parse_multisig_cosigner(
         }
     };
 
-    // L18: with a null derivation, infer coin-type from the xpub neutral prefix
-    // (xpub → mainnet/0, tpub → testnet/1) and synthesize the canonical BIP-48
-    // path for the variant class. With a present derivation, extract coin-type
-    // as before.
-    let (derivation, coin_type) = match derivation_opt {
+    // L18: with a null derivation, infer the coin type from the xpub neutral
+    // prefix (xpub → 0, tpub → 1) and synthesize the canonical BIP-48 path for
+    // the variant class. A present derivation is kept as written (its coin
+    // type is checked by the network rule, Spec B unit 3).
+    let derivation = match derivation_opt {
         Some(d) => {
-            let path = DerivationPath::from_str(&d).map_err(|e| {
+            DerivationPath::from_str(&d).map_err(|e| {
                 ToolkitError::ImportWalletParse(format!(
                     "import-wallet: electrum: parse error: cosigner `{key}` derivation-path parse: {e}"
                 ))
             })?;
-            let comps: Vec<&ChildNumber> = path.into_iter().collect();
-            let coin_type = if comps.len() >= 2 {
-                match comps[1] {
-                    ChildNumber::Hardened { index } => *index,
-                    ChildNumber::Normal { index } => {
-                        return Err(ToolkitError::ImportWalletParse(format!(
-                            "import-wallet: electrum: parse error: cosigner `{key}` coin-type component {index} is not hardened"
-                        )));
-                    }
-                }
-            } else {
-                // Path too short to extract coin-type: default to 0 (mainnet) per
-                // the toolkit's network-default convention; downstream parse may
-                // still reject if xpub neutral prefix disagrees.
-                0
-            };
-            (d, coin_type)
+            d
         }
         None => {
             let coin = u32::from(neutral_xpub.starts_with("tpub"));
@@ -957,7 +909,7 @@ fn parse_multisig_cosigner(
                  \"use a master key\" cosigner); inferring coin-type from the xpub prefix and \
                  synthesizing the canonical BIP-48 origin {synthesized}"
             );
-            (synthesized, coin)
+            synthesized
         }
     };
 
@@ -986,7 +938,6 @@ fn parse_multisig_cosigner(
         derivation,
         neutral_xpub,
         variant_class,
-        coin_type,
         label,
     })
 }

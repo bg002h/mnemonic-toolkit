@@ -47,6 +47,16 @@ fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from("tests/fixtures/wallet_import").join(name)
 }
 
+/// As `run_import_file`, on `--network <net>`.
+fn run_import_file_on(p: &PathBuf, format: &str, net: &str) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob"])
+        .arg(p)
+        .args(["--format", format, "--network", net])
+        .assert()
+}
+
 fn run_import_file(path: &PathBuf, format: &str) -> assert_cmd::assert::Assert {
     Command::cargo_bin("mnemonic")
         .unwrap()
@@ -145,7 +155,8 @@ fn fixture_bsms_2line_multi_2of3_preserves_declaration_order() {
 fn fixture_bsms_2line_decay_144_parses_clean() {
     // Decaying-multisig N=144 (1-day fallback). Testnet (704c7836).
     let p = fixture_path("bsms-2line-decay-144.txt");
-    let out = run_import_file(&p, "bsms").success();
+    // Spec B unit 3: a test-network blob is imported on a test flag.
+    let out = run_import_file_on(&p, "bsms", "testnet").success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("cosigners=2"), "stdout: {stdout}");
     assert!(stdout.contains("network=testnet"), "stdout: {stdout}");
@@ -178,7 +189,8 @@ fn fixture_bsms_shwsh_2of3_parses_clean() {
 fn fixture_bsms_testnet_2of2_parses_clean() {
     // tpub-based 2-of-2 with testnet coin-type (1').
     let p = fixture_path("bsms-testnet-2of2.txt");
-    let out = run_import_file(&p, "bsms").success();
+    // Spec B unit 3: a test-network blob is imported on a test flag.
+    let out = run_import_file_on(&p, "bsms", "testnet").success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("cosigners=2"));
     assert!(stdout.contains("network=testnet"), "stdout: {stdout}");
@@ -256,7 +268,8 @@ fn fixture_core_multisig_2of3_parses_clean() {
 #[test]
 fn fixture_core_testnet_bip84_parses_clean() {
     let p = fixture_path("core-testnet-bip84.json");
-    let out = run_import_file(&p, "bitcoin-core").success();
+    // Spec B unit 3: a test-network blob is imported on a test flag.
+    let out = run_import_file_on(&p, "bitcoin-core", "testnet").success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("network=testnet"), "stdout: {stdout}");
 }

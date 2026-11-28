@@ -70,7 +70,7 @@ use super::{
 use crate::error::ToolkitError;
 use crate::parse_descriptor;
 use crate::synthesize::{xpub_to_65, ResolvedSlot};
-use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
 use miniscript::descriptor::checksum::Engine as ChecksumEngine;
 use std::io::Write;
 use std::str::FromStr;
@@ -527,43 +527,9 @@ pub(super) fn parse_text(
     let csum = compute_bip380_checksum(&descriptor_body_raw)?;
     let descriptor_with_csum = format!("{descriptor_body_raw}#{csum}");
 
-    // Network detection: BIP-48 coin-type from the first cosigner's
-    // derivation path (component index 1, hardened).
-    // BIP-45 root `m/45'` has no coin-type component: when EVERY cosigner is
-    // at `m/45'`, take the network from the xpub version instead (the
-    // `assert_slots_network_agrees` cross-check below covers every xpub).
-    let is_bip45_root = |p: &DerivationPath| {
-        let c: Vec<&ChildNumber> = p.into_iter().collect();
-        c.len() == 1 && matches!(c[0], ChildNumber::Hardened { index: 45 })
-    };
-    let bip45 = resolved.iter().all(|c| is_bip45_root(&c.path));
-    let network = if bip45 {
-        match resolved[0].xpub.network {
-            bitcoin::NetworkKind::Main => bitcoin::Network::Bitcoin,
-            bitcoin::NetworkKind::Test => bitcoin::Network::Testnet,
-        }
-    } else {
-        network_from_path(&resolved[0].path)?
-    };
-
-    // Heterogeneity check: all cosigners must share the same coin-type.
-    let first_ct = if bip45 {
-        0
-    } else {
-        coin_type_index(&resolved[0].path)?
-    };
-    for (i, cs) in resolved.iter().enumerate().skip(1) {
-        if bip45 {
-            continue;
-        }
-        let ct = coin_type_index(&cs.path)?;
-        if ct != first_ct {
-            return Err(ToolkitError::ImportWalletParse(format!(
-                "import-wallet: coldcard-multisig: parse error: cosigner {i} has coin-type \
-                 {ct}, cosigner 0 has coin-type {first_ct}; all cosigners must share a coin-type"
-            )));
-        }
-    }
+    // The network is the run's (Spec B unit 3): every cosigner's key and
+    // origin coin are checked by the network rule in `import_wallet`.
+    let network = bitcoin::Network::Bitcoin; // placeholder: `import_wallet` sets the run network
 
     // Feed the descriptor body through the standard concrete-keys →
     // @N-placeholder pipeline so the toolkit's descriptor representation
@@ -607,13 +573,6 @@ pub(super) fn parse_text(
         .collect();
 
     validate_watch_only_resolved(&cosigners_slots)?;
-
-    // cycle-5 S-NET (axis 2 / H15): xpub-version vs coin-type cross-check.
-    crate::wallet_import::pipeline::assert_slots_network_agrees(
-        &cosigners_slots,
-        network,
-        "import: coldcard-multisig",
-    )?;
 
     let metadata = ColdcardMultisigSourceMetadata {
         name,
@@ -798,40 +757,6 @@ fn compute_bip380_checksum(body: &str) -> Result<String, ToolkitError> {
         ))
     })?;
     Ok(eng.checksum())
-}
-
-/// Network detection per BIP-48 coin-type child number at path component
-/// index 1 (hardened). Mirrors `bsms::network_from_origins` semantics.
-fn network_from_path(path: &DerivationPath) -> Result<bitcoin::Network, ToolkitError> {
-    let ct = coin_type_index(path)?;
-    match ct {
-        0 => Ok(bitcoin::Network::Bitcoin),
-        1 => Ok(bitcoin::Network::Testnet),
-        other => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: coldcard-multisig: parse error: unsupported coin-type \
-             {other} on derivation path; only 0 (mainnet) and 1 (testnet) supported per BIP-48"
-        ))),
-    }
-}
-
-/// Extract the coin-type index from a BIP-48 derivation path (component
-/// index 1, must be hardened). Returns the raw u32 index.
-fn coin_type_index(path: &DerivationPath) -> Result<u32, ToolkitError> {
-    let comps: Vec<&ChildNumber> = path.into_iter().collect();
-    if comps.len() < 2 {
-        return Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: coldcard-multisig: parse error: derivation path has only {} \
-             components; need ≥2 for BIP-48 coin-type inference",
-            comps.len()
-        )));
-    }
-    match comps[1] {
-        ChildNumber::Hardened { index } => Ok(*index),
-        ChildNumber::Normal { index } => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: coldcard-multisig: parse error: coin-type component {index} is \
-             not hardened; BIP-48 requires `<coin_type>'`"
-        ))),
-    }
 }
 
 /// Extract the "key" portion of a line of the form `Key: value`. Returns
@@ -1846,7 +1771,7 @@ CAFEBABE: {XPUB_D0_A}\n" // per-line XFP CAFEBABE vs computed FP_D0_A (depth 0)
 
     /// Testnet parse: BIP-48 path `m/48'/1'/...'` → coin-type 1 → Network::Testnet.
     #[test]
-    fn parse_testnet_path_sets_network_testnet() {
+    fn parse_testnet_path_keeps_path_network_placeholder() {
         let tpub_a = "tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC";
         let tpub_b = "tpubDFiXyf7zmBhQrSHoAQB6SmMpF3rfSihAxQGMdQUtZfE8HWHkWLLNLTiYpMzvHnFiTmuUSYieHUYv4tFguzmiHeDrYV8TtWGCWt5qpqox4w3";
         let blob = format!(
@@ -1860,7 +1785,11 @@ Format: P2WSH\n\
         );
         let mut stderr = Vec::new();
         let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
-        assert_eq!(p.network, bitcoin::Network::Testnet);
+        // Spec B unit 3: the parser no longer infers a network from the coin
+        // type (a placeholder until import-wallet sets the run network); the
+        // path is kept as written for the network rule.
+        assert_eq!(p.network, bitcoin::Network::Bitcoin);
+        assert_eq!(p.cosigners[0].path.to_string(), "48'/1'/0'/2'");
     }
 
     /// Cross-cosigner coin-type heterogeneity rejected.
@@ -1872,7 +1801,7 @@ Format: P2WSH\n\
     /// reached/exercised refusal point. The per-line `Derivation:` paths still
     /// diverge in coin-type (mainnet 0 vs testnet 1).
     #[test]
-    fn parse_heterogeneous_coin_type_rejected() {
+    fn parse_heterogeneous_coin_type_parses() {
         let tpub_a = "tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC";
         // Mix mainnet xpub (coin-type 0) with testnet-pathed cosigner (coin-type 1).
         let blob = format!(
@@ -1885,13 +1814,12 @@ Derivation: m/48'/0'/0'/2'\n\
 Derivation: m/48'/1'/0'/2'\n\
 {tpub_a}\n"
         );
+        // Spec B unit 3: mixed coin types are no parse error any more; each
+        // key's coin is checked against its own key by the network rule.
         let mut stderr = Vec::new();
-        let err = parse_text(blob.as_bytes(), &mut stderr).unwrap_err();
-        let msg = format!("{err:?}");
-        assert!(
-            msg.contains("coin-type") && msg.contains("must share a coin-type"),
-            "got: {msg}"
-        );
+        let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
+        assert_eq!(p.cosigners.len(), 2);
+        assert_eq!(p.cosigners[1].path.to_string(), "48'/1'/0'/2'");
     }
 
     /// `parse()` (the `WalletFormatParser::parse` impl) wraps the

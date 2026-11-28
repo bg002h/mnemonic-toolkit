@@ -112,6 +112,9 @@ fn s2_red_28b_compare_cost_repeated_digest_all_kinds() {
 
 /// I4: a one-component derivation path other than `m/45'` is refused, not
 /// imported as BIP-45. Kills `&&` -> `||` in coldcard_multisig.rs.
+/// Since the network rule (Spec B unit 3) the BIP-45 branch is gone: the
+/// path is kept as written and the run's network applies (the name is
+/// historical).
 #[test]
 fn s2_red_19c_single_component_non_45_path_refused() {
     let blob = format!(
@@ -129,10 +132,11 @@ fn s2_red_19c_single_component_non_45_path_refused() {
         ],
         Some(&blob),
     );
-    assert_eq!(code, 2, "stdout: {stdout}");
-    assert_eq!(
-        stderr,
-        "error: import-wallet: coldcard-multisig: parse error: derivation path has only 1 \
-         components; need ≥2 for BIP-48 coin-type inference\n"
-    );
+    // Spec B unit 3: the coin-type network inference (and with it this
+    // path-length refusal) is deleted; the run decides the network, and
+    // each path is kept as written (no N1 coin, no source). The mainnet
+    // keys agree with the mainnet run: imported, no network line.
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
+    assert!(!stderr.contains("network mismatch"), "stderr: {stderr}");
 }

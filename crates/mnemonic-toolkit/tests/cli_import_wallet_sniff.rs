@@ -127,7 +127,8 @@ fn sniff_path_roundtrip() {
     // fixture (their flagship blob) WITHOUT `--format`. Sniff must route
     // to BSMS and parse cleanly.
     let p = fixture_path("bsms_2line_decaying_multisig_32768.txt");
-    let out = run_import(&["--blob", p.to_str().unwrap()]).success();
+    // Spec B unit 3: a test-network blob is imported on a test flag.
+    let out = run_import(&["--blob", p.to_str().unwrap(), "--network", "testnet"]).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     // The decaying-multisig flagship is testnet (path m/48'/1'/...);
     // sniff must still parse it cleanly end-to-end.

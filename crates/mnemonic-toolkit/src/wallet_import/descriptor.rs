@@ -22,7 +22,7 @@ use super::{
 use crate::error::ToolkitError;
 use crate::parse_descriptor;
 use crate::synthesize::{xpub_to_65, ResolvedSlot};
-use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
 use regex::Regex;
 use std::io::Write;
 use std::sync::OnceLock;
@@ -78,11 +78,7 @@ impl WalletFormatParser for DescriptorParser {
         })?;
 
         // Step 4: build ResolvedSlot vec from the descriptor's key origins.
-        let origins = crate::wallet_import::pipeline::extract_origin_components(
-            &descriptor_str,
-            "descriptor",
-        )?;
-        let network = network_from_origins(&origins)?;
+        let network = bitcoin::Network::Bitcoin; // placeholder: `import_wallet` sets the run network after the network rule (Spec B unit 3);
         let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(parsed_keys.len());
         for (i, _) in parsed_keys.iter().enumerate() {
             let (xpub, fp, path) = build_slot_fields(&descriptor_str, i)?;
@@ -98,15 +94,6 @@ impl WalletFormatParser for DescriptorParser {
             });
         }
         validate_watch_only_resolved(&cosigners)?;
-
-        // cycle-5 S-NET (axis 2 / H15): each decoded xpub's NetworkKind must
-        // agree with the coin-type-derived network — rejects a hand-edited blob
-        // carrying a tpub on a mainnet coin-type path (or vice-versa).
-        crate::wallet_import::pipeline::assert_slots_network_agrees(
-            &cosigners,
-            network,
-            "import: descriptor",
-        )?;
 
         // Step 5: threshold (multisig only; singlesig → None).
         let threshold = extract_threshold_local(&descriptor_str)?;
@@ -170,55 +157,6 @@ fn build_slot_fields(
         ))
     })?;
     crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xpub_str, "descriptor")
-}
-
-/// Infer network from the cosigners' BIP-48 coin-type. Mirrors
-/// `specter::network_from_origins`.
-fn network_from_origins(
-    origins: &[(Fingerprint, DerivationPath, String)],
-) -> Result<bitcoin::Network, ToolkitError> {
-    if origins.is_empty() {
-        return Err(ToolkitError::ImportWalletParse(
-            "import-wallet: descriptor: parse error: no origins to infer network from".to_string(),
-        ));
-    }
-    let coin_types: Vec<u32> = origins
-        .iter()
-        .map(|(_, p, _)| coin_type_from_path(p))
-        .collect::<Result<Vec<_>, _>>()?;
-    let first = coin_types[0];
-    for (i, ct) in coin_types.iter().enumerate().skip(1) {
-        if *ct != first {
-            return Err(ToolkitError::ImportWalletParse(format!(
-                "import-wallet: descriptor: cosigner {i} has coin-type {ct}, cosigner 0 has coin-type {first}; all cosigners must share a coin-type"
-            )));
-        }
-    }
-    match first {
-        0 => Ok(bitcoin::Network::Bitcoin),
-        1 => Ok(bitcoin::Network::Testnet),
-        other => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: descriptor: parse error: unsupported coin-type {other} on origin path; only 0 (mainnet) and 1 (testnet) supported per BIP-48"
-        ))),
-    }
-}
-
-/// BIP-48 coin-type = the 2nd path component (hardened). Mirrors
-/// `specter::coin_type_from_path`.
-fn coin_type_from_path(path: &DerivationPath) -> Result<u32, ToolkitError> {
-    let comps: Vec<&ChildNumber> = path.into_iter().collect();
-    if comps.len() < 2 {
-        return Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: descriptor: parse error: origin path has only {} components; need ≥2 for BIP-48 coin-type inference",
-            comps.len()
-        )));
-    }
-    match comps[1] {
-        ChildNumber::Hardened { index } => Ok(*index),
-        ChildNumber::Normal { index } => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: descriptor: parse error: coin-type component {index} is not hardened; BIP-48 requires `<coin_type>'`"
-        ))),
-    }
 }
 
 /// Extract K from `multi(K, ...)` / `sortedmulti(K, ...)`; `Ok(None)` for

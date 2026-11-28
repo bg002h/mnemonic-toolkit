@@ -259,13 +259,101 @@ pub struct ImportWalletArgs {
     #[arg(long = "decrypt-password-stdin")]
     pub decrypt_password_stdin: bool,
 
-    /// v0.34.6: re-bind the imported network to disambiguate signet/regtest
-    /// from the coin-type-1→testnet collapse (SPEC §4.2 step 8). Honored ONLY
-    /// within the parsed coin-type class (testnet ↔ {testnet,signet,regtest};
-    /// mainnet ↔ mainnet); cross-class is refused. Absent = use the
-    /// coin-type-derived network. Closes `wallet-import-signet-regtest-disambiguation`.
+    /// The network of the run (default mainnet). The blob's keys, their
+    /// origin paths' coin types and a network the blob states are checked
+    /// against it: a contradiction is refused (exit 8).
     #[arg(long, value_name = "NETWORK")]
     pub network: Option<CliNetwork>,
+
+    /// Go on when an origin path's coin type (0h or 1h) disagrees with its key or the network; the output is for the run's network, every path is kept as written, and a warning is printed each time.
+    #[arg(long = "accept-coin-type-mismatch")]
+    pub accept_coin_type_mismatch: bool,
+}
+
+/// The network-rule sources of one ParsedImport (Spec B unit 3). Coldcard's
+/// generic JSON is a stated network (its `chain`, class grain) owning every
+/// section's key, sections ordered by name; only the imported section's path
+/// coin is compared with its key (A17). Every other format's keys are the
+/// entry's cosigners, `<who>` per format (`jade key @N`,
+/// `coldcard-multisig key @N`, else `key @i`), each with its origin coin.
+fn import_network_sources(
+    format: &str,
+    blob_text: &str,
+    file: &str,
+    p: &crate::wallet_import::ParsedImport,
+) -> Vec<crate::network_rule::Source> {
+    use crate::network_rule::{
+        key_coin, xpub_key_source, Class, Device, KeySource, PathWho, SectionKey, Source,
+        StatedNet, Who,
+    };
+    if let crate::wallet_import::ImportProvenance::Coldcard(meta) = &p.provenance {
+        use crate::wallet_import::coldcard::ColdcardChain;
+        let (text, class) = match meta.chain {
+            ColdcardChain::Btc => ("chain BTC (mainnet)", Class::Main),
+            ColdcardChain::Xtn => ("chain XTN (a test network)", Class::Test),
+            ColdcardChain::Xrt => ("chain XRT (a test network)", Class::Test),
+        };
+        let imported = meta.bip_derivation.as_json_key();
+        let mut keys: Vec<SectionKey> = Vec::new();
+        if let Ok(serde_json::Value::Object(obj)) =
+            serde_json::from_str::<serde_json::Value>(blob_text)
+        {
+            let mut names: Vec<&String> = obj
+                .keys()
+                .filter(|k| {
+                    matches!(
+                        k.as_str(),
+                        "bip44" | "bip48_1" | "bip48_2" | "bip49" | "bip84" | "bip86" | "xpub"
+                    )
+                })
+                .collect();
+            names.sort();
+            for name in names {
+                let v = &obj[name.as_str()];
+                let (xpub, deriv) = match v {
+                    serde_json::Value::String(x) => (Some(x.as_str()), None),
+                    serde_json::Value::Object(o) => (
+                        o.get("xpub").and_then(|x| x.as_str()),
+                        o.get("deriv").and_then(|d| d.as_str()),
+                    ),
+                    _ => (None, None),
+                };
+                let Some(xpub) = xpub else { continue };
+                let coins = if name == imported {
+                    deriv
+                        .and_then(|d| d.parse::<bitcoin::bip32::DerivationPath>().ok())
+                        .and_then(|d| key_coin(PathWho::OwnKey, &d))
+                        .into_iter()
+                        .collect()
+                } else {
+                    vec![]
+                };
+                if let Some(key) = KeySource::from_text(Who::plain(name.as_str()), xpub, coins) {
+                    keys.push(SectionKey {
+                        section: name.clone(),
+                        key,
+                    });
+                }
+            }
+        }
+        return vec![Source::Stated {
+            file: file.to_string(),
+            text: text.to_string(),
+            net: StatedNet::Class(class),
+            device: Device::Coldcard,
+            keys,
+        }];
+    }
+    let who = |i: usize| match format {
+        "jade" => Who::stem("jade key", i),
+        "coldcard-multisig" => Who::stem("coldcard-multisig key", i),
+        _ => Who::key(i),
+    };
+    p.cosigners
+        .iter()
+        .enumerate()
+        .map(|(i, c)| Source::Key(xpub_key_source(who(i), &c.xpub, blob_text, Some(&c.path))))
+        .collect()
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -1212,38 +1300,47 @@ electrum|jade|sparrow|specter>"
         }
     };
 
-    // v0.34.6: `--network` override (signet/regtest disambiguation). The
-    // override must stay WITHIN the parsed coin-type class — the blob's xpub
-    // prefix is coin-type-bound (parser yields only Bitcoin/coin-type-0 or
-    // Testnet/coin-type-1). Closes `wallet-import-signet-regtest-disambiguation`.
-    if let Some(override_net) = args.network {
-        // cycle-5 H9 (axis 1): the class-check must read the SAME per-entry
-        // network the rebind writes — checking `parsed.first()` only, then
-        // rebinding via `iter_mut()`, silently relabels a heterogeneous
-        // `[Bitcoin, Testnet]` Vec whose `first()` happens to match the
-        // override. Refuse if ANY entry's coin-type class disagrees with the
-        // requested override (reuse `ImportWalletNetworkClassMismatch`, exit
-        // 1 — the adjacent-sibling refusal; this is the SAME condition applied
-        // per-entry, NOT the xpub-version axis-2 `NetworkMismatch`/exit 2).
-        for p in parsed.iter() {
-            let parsed_coin_type: u32 = if p.network == bitcoin::Network::Bitcoin {
-                0
-            } else {
-                1
-            };
-            if override_net.coin_type() != parsed_coin_type {
-                return Err(ToolkitError::ImportWalletNetworkClassMismatch {
-                    requested: override_net.human_name().to_string(),
-                    parsed_coin_type,
-                });
+    // The network rule (Spec B unit 3; Spec A §4.1 "every parser"): each
+    // ParsedImport's keys, their origin coin types and (Coldcard) the stated
+    // chain are checked against the run (`--network`, default mainnet), before
+    // `--select-descriptor` (every descriptor of a blob is checked). Lines of
+    // several ParsedImports concatenate in blob order. After the check every
+    // entry is on the run network, and the BSMS first-address audit runs on it.
+    let run_net = crate::network_rule::RunNet::from_opt(args.network);
+    {
+        let blob_text = String::from_utf8_lossy(&blob);
+        let file = if blob_path.as_os_str() == "-" {
+            "the blob on stdin".to_string()
+        } else {
+            blob_path.display().to_string()
+        };
+        let mut refused: Vec<crate::network_rule::Line> = Vec::new();
+        let mut warnings: Vec<crate::network_rule::Line> = Vec::new();
+        for p in &parsed {
+            let mut input = crate::network_rule::Input::new(
+                run_net,
+                import_network_sources(format_str, &blob_text, &file, p),
+                crate::network_rule::Thing::Descriptor,
+            );
+            input.accept_coin_type = args.accept_coin_type_mismatch;
+            match crate::network_rule::evaluate(&input) {
+                crate::network_rule::Verdict::Refuse(lines) => refused.extend(lines),
+                crate::network_rule::Verdict::Proceed(lines) => warnings.extend(lines),
             }
         }
-        // All entries are within the same coin-type class as the override; the
-        // override may only rebind WITHIN that homogeneous class.
-        let rebound = override_net.to_bitcoin_network();
-        for p in parsed.iter_mut() {
-            p.network = rebound;
+        if !refused.is_empty() {
+            return Err(ToolkitError::NetworkRule { lines: refused });
         }
+        for w in &warnings {
+            writeln!(stderr, "{}", w.text).map_err(ToolkitError::Io)?;
+        }
+    }
+    let rebound = run_net.net.to_bitcoin_network();
+    for p in parsed.iter_mut() {
+        p.network = rebound;
+    }
+    for p in &parsed {
+        crate::wallet_import::bsms::first_address_audit(p, rebound, stderr)?;
     }
 
     // Seed overlay (SPEC §8.3). Apply BEFORE select-descriptor filter so
@@ -1917,6 +2014,7 @@ fn emit_json_envelope<W: Write, E: Write>(
             let chain_str = match meta.chain {
                 crate::wallet_import::coldcard::ColdcardChain::Btc => "BTC",
                 crate::wallet_import::coldcard::ColdcardChain::Xtn => "XTN",
+                crate::wallet_import::coldcard::ColdcardChain::Xrt => "XRT",
             };
             let bip_str = match meta.bip_derivation {
                 crate::wallet_import::coldcard::ColdcardBip::Bip44 => "bip44",

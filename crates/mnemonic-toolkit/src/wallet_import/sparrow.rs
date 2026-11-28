@@ -68,7 +68,7 @@ use super::{
 use crate::error::ToolkitError;
 use crate::parse_descriptor;
 use crate::synthesize::{xpub_to_65, ResolvedSlot};
-use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
 use regex::Regex;
 use serde_json::Value;
 use std::io::Write;
@@ -429,9 +429,7 @@ impl WalletFormatParser for SparrowParser {
         })?;
 
         // Step 8: build ResolvedSlot vec.
-        let origins =
-            crate::wallet_import::pipeline::extract_origin_components(&substituted, "sparrow")?;
-        let network = network_from_origins(&origins)?;
+        let network = bitcoin::Network::Bitcoin; // placeholder: `import_wallet` sets the run network after the network rule (Spec B unit 3);
         let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(parsed_keys.len());
         for (i, _) in parsed_keys.iter().enumerate() {
             let (xpub, fp, path) = build_slot_fields(&substituted, i)?;
@@ -447,13 +445,6 @@ impl WalletFormatParser for SparrowParser {
             });
         }
         validate_watch_only_resolved(&cosigners)?;
-
-        // cycle-5 S-NET (axis 2 / H15): xpub-version vs coin-type cross-check.
-        crate::wallet_import::pipeline::assert_slots_network_agrees(
-            &cosigners,
-            network,
-            "import: sparrow",
-        )?;
 
         // Threshold extraction — for MULTI scripts (`multi(K,...)`,
         // `sortedmulti(K,...)`); SINGLE has no threshold token.
@@ -593,51 +584,6 @@ fn build_slot_fields(
         ))
     })?;
     crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xpub_str, "sparrow")
-}
-
-fn network_from_origins(
-    origins: &[(Fingerprint, DerivationPath, String)],
-) -> Result<bitcoin::Network, ToolkitError> {
-    if origins.is_empty() {
-        return Err(ToolkitError::ImportWalletParse(
-            "import-wallet: sparrow: parse error: no origins to infer network from".to_string(),
-        ));
-    }
-    let coin_types: Vec<u32> = origins
-        .iter()
-        .map(|(_, p, _)| coin_type_from_path(p))
-        .collect::<Result<Vec<_>, _>>()?;
-    let first = coin_types[0];
-    for (i, ct) in coin_types.iter().enumerate().skip(1) {
-        if *ct != first {
-            return Err(ToolkitError::ImportWalletParse(format!(
-                "import-wallet: sparrow: cosigner {i} has coin-type {ct}, cosigner 0 has coin-type {first}; all cosigners must share a coin-type"
-            )));
-        }
-    }
-    match first {
-        0 => Ok(bitcoin::Network::Bitcoin),
-        1 => Ok(bitcoin::Network::Testnet),
-        other => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: sparrow: parse error: unsupported coin-type {other} on origin path; only 0 (mainnet) and 1 (testnet) supported per BIP-48"
-        ))),
-    }
-}
-
-fn coin_type_from_path(path: &DerivationPath) -> Result<u32, ToolkitError> {
-    let comps: Vec<&ChildNumber> = path.into_iter().collect();
-    if comps.len() < 2 {
-        return Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: sparrow: parse error: origin path has only {} components; need ≥2 for BIP-48 coin-type inference",
-            comps.len()
-        )));
-    }
-    match comps[1] {
-        ChildNumber::Hardened { index } => Ok(*index),
-        ChildNumber::Normal { index } => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: sparrow: parse error: coin-type component {index} is not hardened; BIP-48 requires `<coin_type>'`"
-        ))),
-    }
 }
 
 /// Extract K from `multi(K, ...)` / `sortedmulti(K, ...)` at the top-level
@@ -1020,7 +966,7 @@ mod tests {
 
     /// Testnet network detection via BIP-48 coin-type=1.
     #[test]
-    fn parse_testnet_network_inferred_from_coin_type_one() {
+    fn parse_testnet_coin_type_one_no_network_inferred() {
         let blob = br#"{
             "name":"testnet","network":"testnet","policyType":"SINGLE","scriptType":"P2WPKH",
             "defaultPolicy":{"miniscript":{"script":"wpkh(@0/**)"}},
@@ -1030,7 +976,9 @@ mod tests {
             }]
         }"#;
         let parsed = parse(blob).unwrap();
-        assert_eq!(parsed[0].network, bitcoin::Network::Testnet);
+        // Spec B unit 3: no network inference from the coin type; a
+        // placeholder until import-wallet sets the run network.
+        assert_eq!(parsed[0].network, bitcoin::Network::Bitcoin);
     }
 
     // ===========================================================================

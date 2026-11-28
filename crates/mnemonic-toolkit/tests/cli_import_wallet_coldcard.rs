@@ -74,7 +74,23 @@ fn coldcard_singlesig_bip86_taproot_parses_clean() {
 #[test]
 fn coldcard_singlesig_bip84_xtn_testnet_parses_clean() {
     let p = fixture_path("coldcard-singlesig-bip84-xtn-testnet.json");
-    let out = run_import(&["--blob", p.to_str().unwrap(), "--format", "coldcard"]).success();
+    // Spec B unit 3: the stated chain XTN against a mainnet run is TX-H4
+    // (exit 8, stdout empty); on a test flag the file imports.
+    let refused = run_import(&["--blob", p.to_str().unwrap(), "--format", "coldcard"]).code(8);
+    assert!(refused.get_output().stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(refused.get_output().stderr.clone()).unwrap(),
+        "error: network mismatch: tests/fixtures/wallet_import/coldcard-singlesig-bip84-xtn-testnet.json says network chain XTN (a test network), but this run is on mainnet (no --network given). Nothing was written. Rerun with --network signet, --network testnet or --network regtest, or use the file made for mainnet.\n"
+    );
+    let out = run_import(&[
+        "--blob",
+        p.to_str().unwrap(),
+        "--format",
+        "coldcard",
+        "--network",
+        "testnet",
+    ])
+    .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("cosigners=1"), "stdout: {stdout}");
     assert!(
@@ -291,6 +307,8 @@ fn coldcard_json_envelope_xtn_carries_chain_xtn() {
         "--format",
         "coldcard",
         "--json",
+        "--network",
+        "testnet",
     ])
     .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();

@@ -788,3 +788,39 @@ derive-child, import-wallet, silent-payment. nostr never sets `secret_input`.
 | R1-M6 | folded: census tidied; 12 helpers moved to their own section with their callers; the five empty flag classes filled (p25_controls TESTFLAG, xpub_to_address_p2pkh MAINKEY+TESTFLAG(testnet), e1c/general_multipath/l1_tpub_network_omitted NOFLAG); 90 tests, 5 mainnet-key-on-test-flag tests |
 | R1-M7 | folded: non-imported Coldcard sections count for TX-H4/TX-H4C, not for the key-form TX-S; A17 |
 | R1-N1 | folded: the verify-bundle dispatch cite is `:497` |
+
+## 9. Implementation notes (implementer, 2026-11-28)
+
+Readings taken where neither the plan nor the specs settle a point, and
+deviations from the plan's text. Each is listed for the whole-diff review.
+
+- **Clippy at unit 3.** Units 0-2/7 left two clippy errors in
+  `network_rule.rs` (`too_many_arguments` on `texts::s_key`; items after the
+  test module). Fixed in the unit-3 commit (an `allow` on `s_key`; the test
+  module moved to the end of the file). No behaviour change.
+- **Unit 3: deletions moved forward.** `ToolkitError::ImportWalletNetworkClassMismatch`
+  and `pipeline::assert_slots_network_agrees` are deleted in unit 3, not 8b:
+  import-wallet is their only caller and owns their arm (Spec A §11 unit 0:
+  the old variants keep their codes "until the unit that owns their arm").
+- **Unit 3: who builds the Jade `<who>`.** The plan has `jade.rs` delegate
+  with a `who_prefix`; the code names the keys in `cmd/import_wallet.rs` from
+  the resolved `--format` (`jade` -> `jade key @N`, `coldcard-multisig` ->
+  `coldcard-multisig key @N`, else `key @i`). Same texts; the parsers stay
+  free of rule texts.
+- **Unit 3: `<file>` for a blob on stdin** (`--blob -`) is `the blob on
+  stdin` (TX-H4/TX-H4C name a file "as given"; `-` names none).
+- **Unit 3: Electrum's null-derivation path.** A cosigner with a null
+  derivation gets a BIP-48 path synthesized from its own prefix (L18). By B1
+  that path is derived, not carried; it is still passed to the rule, which is
+  harmless because it agrees with its own key by construction.
+- **Unit 3: RED check.** The TRACE tests were run against the pre-unit-3 src
+  (src stashed, tests kept): `nr3_coldcard_chain_against_key_refused`,
+  `nr3_jade_names_jade_and_exits_8`, `nr3_import_test_blob_no_flag_refused`
+  and `nr8a_import_wallet_coin_type_flag` fail there; the control
+  `nr3_coldcard_consistent_unchanged` and the plan test
+  `nr3_bsms_first_address_audit_uses_run_network` pass there (the old parser
+  inferred testnet from the coin type; the test guards the move of the audit
+  after the placeholder network, which is the R1-I1 regression). R2-M2 is in
+  the test: `build_bsms_6line` writes a checksummed descriptor line.
+- **Unit 3: the 8a import-wallet flag leg** (`nr8a_import_wallet_coin_type_flag`)
+  is written and committed with unit 3, since it exercises unit 3's check.

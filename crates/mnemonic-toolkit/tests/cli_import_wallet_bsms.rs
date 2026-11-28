@@ -87,6 +87,34 @@ fn run_import(blob_path: &PathBuf) -> assert_cmd::assert::Assert {
         .assert()
 }
 
+/// As `run_import`, on `--network <net>` (Spec B unit 3: the run network is
+/// `--network` or mainnet, so a test-network blob is imported on a test flag).
+fn run_import_on(blob_path: &PathBuf, net: &str) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob"])
+        .arg(blob_path)
+        .args(["--format", "bsms", "--network", net])
+        .assert()
+}
+
+/// As `run_import_stdin`, on `--network <net>`.
+fn run_import_stdin_on(blob_contents: &str, net: &str) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bsms",
+            "--network",
+            net,
+        ])
+        .write_stdin(blob_contents.to_string())
+        .assert()
+}
+
 /// Run the import-wallet CLI scaffold with stdin-piped blob.
 fn run_import_stdin(blob_contents: &str) -> assert_cmd::assert::Assert {
     Command::cargo_bin("mnemonic")
@@ -104,7 +132,11 @@ fn run_import_stdin(blob_contents: &str) -> assert_cmd::assert::Assert {
 fn bsms_2_line_happy_path() {
     // User's flagship seedcase blob (vendored at fixture path).
     let p = fixture_path("bsms_2line_decaying_multisig_32768.txt");
-    let out = run_import(&p).success();
+    // Spec B R3.9: with no --network the run is mainnet and the blob's
+    // tpubs are refused (exit 8, stdout empty).
+    let refused = run_import(&p).code(8);
+    assert!(refused.get_output().stdout.is_empty());
+    let out = run_import_on(&p, "testnet").success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     // SPEC §2.4: 2-line WARNING fires.
@@ -249,7 +281,7 @@ fn bsms_2_line_warning_emitted() {
     // Distinct from §2.4 — pins the byte-exact WARNING template per SPEC
     // §2.4 row 1.
     let p = fixture_path("bsms_2line_decaying_multisig_32768.txt");
-    let out = run_import(&p).success();
+    let out = run_import_on(&p, "testnet").success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(stderr.contains(
         "warning: import-wallet: bsms: 2-line excerpt; full BIP-129 Round-2 carries token + signature + first-address verification fields; accepting reduced form"
@@ -268,7 +300,7 @@ fn bsms_decaying_multisig_n_144() {
         "wsh(thresh(2,pkh([{TESTNET_FP_A}/48'/1'/3'/2']{TESTNET_XPUB_A}/<0;1>/*),s:pk([{TESTNET_FP_B}/48'/1'/2'/2']{TESTNET_XPUB_B}/<0;1>/*),sln:older(144)))"
     );
     let blob = build_bsms_2line(&desc);
-    let out = run_import_stdin(&blob).success();
+    let out = run_import_stdin_on(&blob, "testnet").success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("cosigners=2"), "stdout: {stdout}");
     assert!(stdout.contains("network=testnet"));
@@ -284,7 +316,7 @@ fn bsms_decaying_multisig_n_4032() {
         "wsh(thresh(2,pkh([{TESTNET_FP_A}/48'/1'/3'/2']{TESTNET_XPUB_A}/<0;1>/*),s:pk([{TESTNET_FP_B}/48'/1'/2'/2']{TESTNET_XPUB_B}/<0;1>/*),sln:older(4032)))"
     );
     let blob = build_bsms_2line(&desc);
-    let out = run_import_stdin(&blob).success();
+    let out = run_import_stdin_on(&blob, "testnet").success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("cosigners=2"));
 }
@@ -297,7 +329,7 @@ fn bsms_decaying_multisig_n_4032() {
 fn bsms_decaying_multisig_n_32768() {
     // Re-use the vendored fixture (mirrors the user's flagship exactly).
     let p = fixture_path("bsms_2line_decaying_multisig_32768.txt");
-    let out = run_import(&p).success();
+    let out = run_import_on(&p, "testnet").success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("cosigners=2"));
     assert!(stdout.contains("threshold=none"));
@@ -450,21 +482,25 @@ fn bsms_not_bsms_blob_exit_1() {
 
 /// Cosigner-to-cosigner coin-type heterogeneity per SPEC §4.2 step 8.
 /// Build a synthetic BSMS where one cosigner is testnet and one is mainnet.
-/// Must reject with `ImportWalletParse` (exit 2).
+/// Spec B unit 3: no longer a parse error; the network rule refuses the
+/// keys (TX-H2, then TX-H1 without its rerun sentence), exit 8.
 #[test]
 fn bsms_mixed_coin_types_rejected() {
     let desc = format!(
         "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/<0;1>/*,[{TESTNET_FP_A}/48'/1'/0'/2']{TESTNET_XPUB_A}/<0;1>/*))"
     );
     let blob = build_bsms_2line(&desc);
-    let assert = run_import_stdin(&blob).failure();
+    let assert = run_import_stdin(&blob).code(8);
+    assert!(assert.get_output().stdout.is_empty());
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    let code = assert.get_output().status.code().unwrap_or(-1);
-    assert_eq!(code, 2, "stderr: {stderr}");
-    assert!(
-        stderr.contains("coin-type")
-            || stderr.contains("parse error")
-            || stderr.contains("all cosigners must share a coin-type"),
+    let lines: Vec<&str> = stderr.lines().collect();
+    assert_eq!(
+        lines,
+        [
+            "warning: import-wallet: bsms: 2-line excerpt; full BIP-129 Round-2 carries token + signature + first-address verification fields; accepting reduced form",
+            "error: network mismatch: key @0 is a mainnet key (xpub), but key @1 is a test-network key (tpub). Nothing was written. Every key of one wallet is for one network: export the odd key again.",
+            "error: network mismatch: key @1 is a test-network key (tpub), but this run is on mainnet (no --network given). Nothing was written. For a mainnet wallet, export the key again with the signer set to mainnet.",
+        ],
         "stderr: {stderr}"
     );
 }
@@ -492,7 +528,7 @@ fn bsms_crlf_normalized() {
 fn bsms_sniff_smoke_true_and_false() {
     // BSMS prefix → success.
     let p = fixture_path("bsms_2line_decaying_multisig_32768.txt");
-    let out = run_import(&p).success();
+    let out = run_import_on(&p, "testnet").success();
     let stdout_ok = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout_ok.contains("cosigners=2"));
 
@@ -799,7 +835,7 @@ fn bsms_4line_via_bundle_roundtrip_json() {
 #[test]
 fn bsms_2line_decay_4032_fixture_parses() {
     let p = fixture_path("bsms-2line-decay-4032.txt");
-    let out = run_import(&p).success();
+    let out = run_import_on(&p, "testnet").success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     // 2-line WARNING fires.
@@ -1156,4 +1192,55 @@ mod shared {
         // ImportWalletAmbiguousFormat without "bsms" in the template.
         stderr.to_lowercase().contains("bsms:") || stderr.contains("expected 2, 4, or 6 lines")
     }
+}
+
+/// Spec B unit 3 (plan R1-I1, R2-M2): the first-address audit derives on the
+/// RUN network, after the network rule. A 6-line test-network blob (tpubs at
+/// `m/48'/1'/0'/2'`, the descriptor line checksummed) on `--network testnet`:
+/// the audit computes a `tb1q` address, and the blob that declares it prints
+/// no mismatch.
+#[test]
+fn nr3_bsms_first_address_audit_uses_run_network() {
+    let desc = format!(
+        "wsh(sortedmulti(2,[{TESTNET_FP_A}/48'/1'/0'/2']{TESTNET_XPUB_A}/<0;1>/*,[{TESTNET_FP_B}/48'/1'/0'/2']{TESTNET_XPUB_B}/<0;1>/*))"
+    );
+    let run_testnet = |first: &str| {
+        let blob = build_bsms_6line(&desc, "deadbeef", "m/48'/1'/0'/2'", first, "H/sig=");
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args([
+                "import-wallet",
+                "--blob",
+                "-",
+                "--format",
+                "bsms",
+                "--network",
+                "testnet",
+            ])
+            .write_stdin(blob)
+            .assert()
+            .success()
+    };
+    // A garbage declared address: the audit reports the address it computed,
+    // which is a testnet one (the run network, not a placeholder).
+    let a = run_testnet("tb1qINTENTIONALLY_GARBAGE_ADDRESS");
+    let stderr = String::from_utf8(a.get_output().stderr.clone()).unwrap();
+    let computed = stderr
+        .split("computed ")
+        .nth(1)
+        .and_then(|s| s.split(',').next())
+        .unwrap_or_else(|| panic!("no computed address; stderr was: {stderr:?}"))
+        .to_string();
+    assert!(computed.starts_with("tb1q"), "stderr was: {stderr:?}");
+    // The blob that declares it: no mismatch, no network line.
+    let a = run_testnet(&computed);
+    let stderr = String::from_utf8(a.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("first-address mismatch"),
+        "stderr was: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("network mismatch"),
+        "stderr was: {stderr:?}"
+    );
 }

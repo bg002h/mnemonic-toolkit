@@ -301,6 +301,8 @@ fn bughunt_tk_19_coldcard_multisig_import_bip45_p2sh() {
 
 /// #19b - BIP-45 mode needs EVERY cosigner at `m/45'`; a mixed set keeps the
 /// coin-type refusal (the triage's cosigner-0-only test would accept it).
+/// Since the network rule (Spec B unit 3) neither mode exists: the run's
+/// network applies, so the mixed set imports (the name is historical).
 #[test]
 fn bughunt_tk_19b_coldcard_multisig_bip45_mixed_paths_refused() {
     let blob = format!(
@@ -318,12 +320,13 @@ fn bughunt_tk_19b_coldcard_multisig_bip45_mixed_paths_refused() {
         ],
         Some(&blob),
     );
-    assert_eq!(code, 2, "stdout: {stdout}");
-    assert_eq!(
-        stderr,
-        "error: import-wallet: coldcard-multisig: parse error: derivation path has only 1 \
-         components; need ≥2 for BIP-48 coin-type inference\n"
-    );
+    // Spec B unit 3: the coin-type network inference (and with it this
+    // path-length refusal) is deleted; the run decides the network, and
+    // each path is kept as written (no N1 coin, no source). The mainnet
+    // keys agree with the mainnet run: imported, no network line.
+    assert_eq!(code, 0, "stderr: {stderr}");
+    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
+    assert!(!stderr.contains("network mismatch"), "stderr: {stderr}");
 }
 
 // ===========================================================================

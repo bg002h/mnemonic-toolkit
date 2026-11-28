@@ -694,11 +694,7 @@ fn parse_entry(
             ))
         })?;
 
-    let origins = crate::wallet_import::pipeline::extract_origin_components(
-        descriptor_body_no_csum,
-        "bitcoin-core",
-    )?;
-    let network = network_from_origins(&origins, idx)?;
+    let network = bitcoin::Network::Bitcoin; // placeholder: `import_wallet` sets the run network after the network rule (Spec B unit 3);
 
     let mut cosigners: Vec<ResolvedSlot> = Vec::with_capacity(parsed_keys.len());
     for (slot_idx, _) in parsed_keys.iter().enumerate() {
@@ -716,14 +712,6 @@ fn parse_entry(
     }
 
     validate_watch_only_resolved(&cosigners)?;
-
-    // cycle-5 S-NET (axis 2 / H15): per-entry, each decoded xpub's NetworkKind
-    // must agree with this entry's coin-type-derived network.
-    crate::wallet_import::pipeline::assert_slots_network_agrees(
-        &cosigners,
-        network,
-        "import: bitcoin-core",
-    )?;
 
     let threshold = extract_threshold(descriptor_body_no_csum)?;
 
@@ -847,52 +835,6 @@ fn build_slot_fields(
         ))
     })?;
     crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xpub_str, "bitcoin-core")
-}
-
-fn network_from_origins(
-    origins: &[(Fingerprint, DerivationPath, String)],
-    entry_idx: usize,
-) -> Result<bitcoin::Network, ToolkitError> {
-    if origins.is_empty() {
-        return Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: bitcoin-core: parse error: descriptors[{entry_idx}]: no origins to infer network from"
-        )));
-    }
-    let coin_types: Vec<u32> = origins
-        .iter()
-        .map(|(_, p, _)| coin_type_from_path(p, entry_idx))
-        .collect::<Result<Vec<_>, _>>()?;
-    let first = coin_types[0];
-    for (i, ct) in coin_types.iter().enumerate().skip(1) {
-        if *ct != first {
-            return Err(ToolkitError::ImportWalletParse(format!(
-                "import-wallet: bitcoin-core: descriptors[{entry_idx}]: cosigner {i} has coin-type {ct}, cosigner 0 has coin-type {first}; all cosigners must share a coin-type"
-            )));
-        }
-    }
-    match first {
-        0 => Ok(bitcoin::Network::Bitcoin),
-        1 => Ok(bitcoin::Network::Testnet),
-        other => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: bitcoin-core: parse error: descriptors[{entry_idx}]: unsupported coin-type {other} on origin path; only 0 (mainnet) and 1 (testnet) supported per BIP-48"
-        ))),
-    }
-}
-
-fn coin_type_from_path(path: &DerivationPath, entry_idx: usize) -> Result<u32, ToolkitError> {
-    let comps: Vec<&ChildNumber> = path.into_iter().collect();
-    if comps.len() < 2 {
-        return Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: bitcoin-core: parse error: descriptors[{entry_idx}]: origin path has only {} components; need ≥2 for BIP-48 coin-type inference",
-            comps.len()
-        )));
-    }
-    match comps[1] {
-        ChildNumber::Hardened { index } => Ok(*index),
-        ChildNumber::Normal { index } => Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: bitcoin-core: parse error: descriptors[{entry_idx}]: coin-type component {index} is not hardened; BIP-48 requires `<coin_type>'`"
-        ))),
-    }
 }
 
 /// Extract K from `thresh(K, ...)` / `multi(K, ...)` / `sortedmulti(K, ...)`

@@ -137,3 +137,32 @@ counts as on the list.
 
 - crates/mnemonic-toolkit/src/network.rs 4
 - crates/mnemonic-toolkit/src/error.rs 1
+
+## Added at unit 3 (run, not grep; each explained by a spec row)
+
+Spec B R3.9 / Spec A §4.1 "import-wallet, blob class against run" (a test blob
+with no flag is a mainnet run; the parse tests now pass `--network testnet`,
+and the ones marked * also pin the no-flag refusal, exit 8):
+- bughunt_s2.rs::bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet NOFLAG *
+- cli_import_wallet_bitcoin_core.rs::core_testnet_tpub_network_detected NOFLAG *
+- cli_import_wallet_bsms.rs::bsms_2_line_happy_path NOFLAG *
+- cli_import_wallet_bsms.rs::bsms_2_line_warning_emitted NOFLAG
+- cli_import_wallet_bsms.rs::bsms_2line_decay_4032_fixture_parses NOFLAG
+- cli_import_wallet_bsms.rs::bsms_decaying_multisig_n_144 NOFLAG
+- cli_import_wallet_bsms.rs::bsms_decaying_multisig_n_4032 NOFLAG
+- cli_import_wallet_bsms.rs::bsms_decaying_multisig_n_32768 NOFLAG
+- cli_import_wallet_bsms.rs::bsms_sniff_smoke_true_and_false NOFLAG
+- cli_import_wallet_coldcard.rs::coldcard_singlesig_bip84_xtn_testnet_parses_clean NOFLAG * (TX-H4 literal)
+- cli_import_wallet_coldcard.rs::coldcard_json_envelope_xtn_carries_chain_xtn NOFLAG
+- cli_import_wallet_roundtrip.rs::fixture_bsms_2line_decay_144_parses_clean NOFLAG
+- cli_import_wallet_roundtrip.rs::fixture_core_testnet_bip84_parses_clean NOFLAG
+- cli_import_wallet_sniff.rs::sniff_path_roundtrip NOFLAG
+- cli_import_wallet_network_override.rs::testnet_blob_default_network_is_testnet, testnet_blob_override_to_mainnet_refused, mainnet_blob_override_to_signet_refused, mixed_mainnet_testnet_blob_override_mainnet_refused_per_entry: exit 1 -> 8, TX-H1 literals
+
+Spec A §4.1 "import-wallet, every parser: key version against the blob's coin
+type" (TX-S key form, exit 8; the coin-type inference refusals are deleted,
+plan §3 unit 3 table):
+- cli_import_wallet_snet_network_mismatch.rs: the 9 `*_rejects` tests exit 2 -> 8 with the TX-S line; the 2 consistent-testnet controls pass `--network testnet`
+- cli_import_wallet_bsms.rs::bsms_mixed_coin_types_rejected: exit 2 -> 8, TX-H2 + TX-H1 (short) literals
+- bughunt_s3.rs::bughunt_tk_19b_coldcard_multisig_bip45_mixed_paths_refused and s2_red.rs::s2_red_19c_single_component_non_45_path_refused: the path-length refusal is gone (exit 2 -> 0, imported, no network line)
+- src unit tests: bsms `parse_4line_first_address_mismatch_emits_warning` (calls `first_address_audit`), coldcard_multisig `parse_heterogeneous_coin_type_rejected` -> `_parses`, `parse_testnet_path_sets_network_testnet` -> `parse_testnet_path_keeps_path_network_placeholder`, sparrow/specter `parse_testnet_network_inferred_from_coin_type_one` -> `parse_testnet_coin_type_one_no_network_inferred`

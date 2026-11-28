@@ -685,7 +685,24 @@ fn core_testnet_tpub_network_detected() {
         "wsh(sortedmulti(2,[{TESTNET_FP_A}/48'/1'/0'/2']{TESTNET_XPUB_A}/<0;1>/*,[{TESTNET_FP_B}/48'/1'/0'/2']{TESTNET_XPUB_B}/<0;1>/*))"
     );
     let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
-    let out = run_core_stdin(&blob).success();
+    // Spec B unit 3 (R3.9): the run is `--network` or mainnet, never the
+    // coin type; with no flag the tpubs are refused (exit 8, stdout empty).
+    let refused = run_core_stdin(&blob).code(8);
+    assert!(refused.get_output().stdout.is_empty());
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bitcoin-core",
+            "--network",
+            "testnet",
+        ])
+        .write_stdin(blob.to_string())
+        .assert()
+        .success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("network=testnet"), "stdout: {stdout}");
 }
