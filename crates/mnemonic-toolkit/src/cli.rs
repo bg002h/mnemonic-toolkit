@@ -84,7 +84,7 @@ enum Command {
     DecodeAddress(cmd::decode_address::DecodeAddressArgs),
     /// emit watch-only wallet artifacts (Bitcoin Core importdescriptors, BIP-388 wallet_policy)
     ExportWallet(cmd::export_wallet::ExportWalletArgs),
-    /// import a third-party wallet blob into an m-format bundle (v0.26.0 Phase 2: BSMS Round-2 only)
+    /// import a third-party wallet blob into an m-format bundle (BSMS, Bitcoin Core, Coldcard, descriptor, Electrum, Jade, Sparrow, Specter)
     ImportWallet(cmd::import_wallet::ImportWalletArgs),
     /// derive deterministic child entropy / keys from a master xprv (BIP-85)
     DeriveChild(cmd::derive_child::DeriveChildArgs),
@@ -118,7 +118,7 @@ enum Command {
     XpubSearch(cmd::xpub_search::XpubSearchArgs),
     /// verify a Bitcoin message signature (legacy P2PKH signmessage + BIP-322 segwit/taproot)
     VerifyMessage(cmd::verify_message::VerifyMessageArgs),
-    /// emit a watch-only restore document (single-sig) from a seed + optional passphrase
+    /// emit a watch-only restore document (single-sig, or multisig with --md1) from a seed + optional passphrase
     Restore(cmd::restore::RestoreArgs),
     /// build a validated wsh(...) descriptor + BIP-388 policy from a JSON policy-tree spec
     BuildDescriptor(cmd::build_descriptor::BuildDescriptorArgs),

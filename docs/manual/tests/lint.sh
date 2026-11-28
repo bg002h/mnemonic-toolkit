@@ -19,6 +19,9 @@
 #                   the `mr` lines of cli-subcommands.list are skipped with a
 #                   WARN and every other check runs unchanged; set, `mr` is
 #                   checked exactly like the other four (a missing flag FAILS).
+#   MT_BIN, ME_BIN — optional, exactly like MR_BIN: the `mt`
+#                   (mnemonic-transaction) and `me` (mnemonic-engrave) CLIs,
+#                   checked against 47-mt.md and 48-me.md when set.
 
 set -euo pipefail
 
@@ -31,12 +34,16 @@ for arg in "$@"; do
     MS_BIN=*)       MS_BIN="${arg#*=}" ;;
     MK_BIN=*)       MK_BIN="${arg#*=}" ;;
     MR_BIN=*)       MR_BIN="${arg#*=}" ;;
+    MT_BIN=*)       MT_BIN="${arg#*=}" ;;
+    ME_BIN=*)       ME_BIN="${arg#*=}" ;;
   esac
 done
 
 : "${SRC_DIR:?SRC_DIR is required}"
 : "${TESTS_DIR:?TESTS_DIR is required}"
 MR_BIN="${MR_BIN:-}"
+MT_BIN="${MT_BIN:-}"
+ME_BIN="${ME_BIN:-}"
 
 fail=0
 step() { printf '\n[lint] === %s ===\n' "$1"; }
@@ -132,7 +139,7 @@ section_of() {
 }
 
 declare -A SEC_FLAGS=() SEC_BODY=() SEC_BIN=() SEC_LABEL=() PINNED=()
-crate_of() { case "$1" in mnemonic) echo mnemonic-toolkit ;; md) echo md-cli ;; ms) echo ms-cli ;; mk) echo mk-cli ;; mr) echo mr-cli ;; esac; }
+crate_of() { case "$1" in mnemonic) echo mnemonic-toolkit ;; md) echo md-cli ;; ms) echo ms-cli ;; mk) echo mk-cli ;; mr) echo mr-cli ;; mt) echo mt-cli ;; me) echo me-cli ;; esac; }
 
 # leaves BIN-NAME BIN-INVOCATION -> every leaf subcommand the binary exposes,
 # one "<name> <sub>[ <subsub>]" per line (clap `Commands:` blocks, `help` skipped).
@@ -153,15 +160,18 @@ else
   # missing from it is a verb nobody checks -- exactly how `md compose` went
   # undocumented (F-647). Every leaf subcommand each pinned binary exposes must
   # be listed, and every listed verb must exist.
-  # `mr` is optional (MR_BIN): unset, its listed verbs leave the comparison
-  # (they are skipped below, with a WARN), and the other four are unaffected.
-  if [ -n "$MR_BIN" ]; then
-    listed_verbs=$(grep -vE '^[[:space:]]*(#|$)' "$LIST" | sort -u)
-  else
-    listed_verbs=$(grep -vE '^[[:space:]]*(#|$)' "$LIST" | grep -vE '^mr( |$)' | sort -u || true)
-    warn "MR_BIN unset; skipping the mr lines of $(basename "$LIST") ($(grep -cE '^mr( |$)' "$LIST" || true) verbs); set MR_BIN to check 45-mr.md"
-  fi
-  exposed_verbs=$( { leaves mnemonic "$MNEMONIC_BIN"; leaves md "$MD_BIN"; leaves ms "$MS_BIN"; leaves mk "$MK_BIN"; [ -z "$MR_BIN" ] || leaves mr "$MR_BIN"; } | sort -u)
+  # `mr`, `mt` and `me` are optional (MR_BIN, MT_BIN, ME_BIN): unset, a
+  # binary's listed verbs leave the comparison (they are skipped below, with
+  # a WARN), and the others are unaffected.
+  listed_verbs=$(grep -vE '^[[:space:]]*(#|$)' "$LIST" | sort -u)
+  for opt in "mr:MR_BIN:45-mr.md" "mt:MT_BIN:47-mt.md" "me:ME_BIN:48-me.md"; do
+    ob=${opt%%:*}; ov=${opt#*:}; ov=${ov%%:*}; oc=${opt##*:}
+    if [ -z "${!ov}" ]; then
+      listed_verbs=$(grep -vE "^${ob}( |\$)" <<<"$listed_verbs" || true)
+      warn "$ov unset; skipping the $ob lines of $(basename "$LIST") ($(grep -cE "^${ob}( |\$)" "$LIST" || true) verbs); set $ov to check $oc"
+    fi
+  done
+  exposed_verbs=$( { leaves mnemonic "$MNEMONIC_BIN"; leaves md "$MD_BIN"; leaves ms "$MS_BIN"; leaves mk "$MK_BIN"; [ -z "$MR_BIN" ] || leaves mr "$MR_BIN"; [ -z "$MT_BIN" ] || leaves mt "$MT_BIN"; [ -z "$ME_BIN" ] || leaves me "$ME_BIN"; } | sort -u)
   if [ -z "$exposed_verbs" ]; then
     err "no subcommands enumerated from the binaries (are the *_BIN real binaries?)"
   else
@@ -184,6 +194,12 @@ else
       mr)
         [ -z "$MR_BIN" ] && continue   # optional; the WARN above says so
         binv="$MR_BIN" ; chapter="$CLI_REF_DIR/45-mr.md" ;;
+      mt)
+        [ -z "$MT_BIN" ] && continue   # optional; the WARN above says so
+        binv="$MT_BIN" ; chapter="$CLI_REF_DIR/47-mt.md" ;;
+      me)
+        [ -z "$ME_BIN" ] && continue   # optional; the WARN above says so
+        binv="$ME_BIN" ; chapter="$CLI_REF_DIR/48-me.md" ;;
       *) err "unknown binary in cli-subcommands.list: $bin"; continue ;;
     esac
     if [ ! -f "$chapter" ]; then

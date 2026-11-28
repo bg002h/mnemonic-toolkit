@@ -1,5 +1,11 @@
 # md-codec Rust API
 
+> **Version note.** This chapter documents `md-codec` **v0.32.0**. The current
+> release is newer: the toolkit builds against md-codec 0.48.7 (its
+> `Cargo.lock`). The API has changed since v0.32.0; check the crate's own
+> docs (`cargo doc -p md-codec`) for the current surface, and pin the version
+> you use rather than the `"0.32"` shown in the snippets below.
+
 This chapter is the reference for the `md-codec`\index{md-codec} crate's public surface at v0.32.0\index{md-codec v0.32.0} (HEAD `df1ed24` in `bg002h/descriptor-mnemonic`). It enumerates every public module, function, type, constant, and error variant. The wire format these APIs encode/decode is §II.1; the address-derivation tier they feed is §III.1; this chapter is the library API only. For the normative wire spec, see `descriptor-mnemonic/design/SPEC_v0_30_wire_format.md` and the in-tree BIP draft at `descriptor-mnemonic/bip/bip-mnemonic-descriptor.mediawiki`.
 
 ## V.1.1 Crate purpose

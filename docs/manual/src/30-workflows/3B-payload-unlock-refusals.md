@@ -1,9 +1,9 @@
 # When the SeedHammer II refuses a payload
 
-A Sealed Payload is what `me seal` writes and what the machine's Sealed Payload
+A Sealed Payload is what [`me seal`](#me-seal) writes and what the machine's Sealed Payload
 program reads. Its secret section is encrypted, so opening it on the device asks
 for the passphrase the host printed when it sealed. That much is the ordinary
-path. (A `sysw` payload from `me sysw pack` is a different container, read by
+path. (A `sysw` payload from [`me sysw pack`](#me-sysw-pack) is a different container, read by
 Load Payload; nothing on this page happens to it.)
 
 This section is about the other one: the machine reads the payload, derives the

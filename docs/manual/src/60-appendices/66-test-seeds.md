@@ -22,9 +22,11 @@ before doing any real work.
 
 ## Why a public test seed
 
-Test seeds make the manual *reproducible*. A reader who runs
-`mnemonic bundle --slot @0.phrase="abandon abandon … about"` gets
-the same ms1, mk1, md1 strings printed in the manual.
+Test seeds make the manual *reproducible*. A reader who pipes
+`abandon abandon … about` into
+`mnemonic bundle --network mainnet --template bip84 --slot @0.phrase=-` gets
+the same ms1, mk1, md1 strings printed in the manual (a phrase typed on
+the command line is refused, so the manual pipes it on stdin).
 Mismatches surface as a bug or a manual-version drift, not as
 "different seeds."
 

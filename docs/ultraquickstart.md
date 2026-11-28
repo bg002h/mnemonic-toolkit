@@ -23,9 +23,14 @@ the gentle ~42-page newcomer walkthrough see
 ## Install
 
 ```sh
-cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --no-gui
 mnemonic --version
 ```
+
+The installer fetches the pinned, checksummed releases of `mnemonic`, `md`,
+`ms` and `mk` (the recover step below uses `md`). To build from source
+instead, see the manual's install chapter: a bare `cargo install --git`
+without `--tag` builds an unreleased branch.
 
 ## Bundle
 
@@ -34,11 +39,16 @@ recipe uses the **public BIP-39 test phrase** so the output is reproducible
 — never engrave or fund a wallet derived from it.
 
 ```sh
-mnemonic bundle \
-  --network mainnet \
-  --template bip84 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic bundle \
+      --network mainnet \
+      --template bip84 \
+      --slot @0.phrase=-
 ```
+
+`--slot @0.phrase=-` reads the phrase from stdin. `mnemonic` refuses a seed
+phrase, an `ms1` card or a passphrase typed on the command line (exit 2),
+because other processes can read a command line.
 
 Output: three card strings (`ms1…`, `mk1…`, `md1…`) plus a chunked-form
 engraving guide. Each card has its own BCH error-correcting checksum.
@@ -46,15 +56,18 @@ engraving guide. Each card has its own BCH error-correcting checksum.
 ## Verify (before stamping)
 
 ```sh
-mnemonic verify-bundle \
+export MS1='<ms1-string>'
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic verify-bundle \
   --network mainnet --template bip84 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-  --ms1 <ms1-string> \
+  --slot @0.phrase=- \
+  --ms1 @env:MS1 \
   --mk1 <mk1-line-1> --mk1 <mk1-line-2> \
   --md1 <md1-line-1> --md1 <md1-line-2> --md1 <md1-line-3>
 ```
 
-`result: ok` → safe to stamp. A `*_decode: error at position N` line names
+The phrase comes on stdin and the `ms1` card from the `MS1` environment
+variable (`@env:MS1`). `result: ok` → safe to stamp. A `*_decode: error at position N` line names
 the single character whose checksum disagrees — re-stamp character `N` of
 the failing card.
 
@@ -76,17 +89,18 @@ derive the wallet alone.
 Read the cards off steel and reverse:
 
 ```sh
-mnemonic convert --from ms1=<ms1-string> --to phrase
-mnemonic convert --from mk1=<mk1-string> --to xpub --to fingerprint --to path
+printf '%s' '<ms1-string>' | mnemonic convert --from ms1=- --to phrase
+mnemonic convert --from "mk1=<mk1-line-1> <mk1-line-2>" --to xpub --to fingerprint --to path
 md decode <md1-line-1> <md1-line-2> <md1-line-3>
 ```
 
-`mnemonic convert` recovers the seed phrase from `ms1`, the xpub + origin
-from `mk1`. `md decode` takes the three `md1` strings positionally and
+`mnemonic convert` recovers the seed phrase from `ms1` (read from stdin:
+`--from ms1=-`), the xpub + origin from `mk1` (both strings in one quoted
+value). `md decode` takes the three `md1` strings positionally and
 returns the wallet policy.
 
-If you have installed `mk-cli` separately, `mk decode <mk1-string>` is
+If you have installed `mk-cli` separately, `mk decode <mk1-line-1> <mk1-line-2>` is
 the minimal-surface alternative for the public-card recovery step.
 
-For multisig (`--template wsh-sortedmulti --threshold 2 --slot @0.phrase=… --slot @1.phrase=… --slot @2.phrase=…`)
+For multisig (`--template wsh-sortedmulti --threshold 2 --slot @0.phrase=@env:SEED_0 --slot @1.phrase=@env:SEED_1 --slot @2.phrase=@env:SEED_2`)
 or watch-only (`--slot @0.xpub=…`), see the QuickStart's Parts III + IV.

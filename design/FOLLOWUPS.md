@@ -1579,7 +1579,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-05-13, v0.8.0 Phase 0 (SPEC §3 OUT-OF-SCOPE classification).
 - **Where:** `ms-codec` and `mnemonic-toolkit` are English-only at v0.8.x. The Trezor python-mnemonic repo also publishes a Japanese vector corpus at `https://github.com/bip32JP/bip32JP.github.io/blob/master/test_JP_BIP39.json`.
 - **What:** Extending BIP-39 support to the Japanese wordlist would add ~24 more Trezor-style vectors. Out-of-scope-per-product at v0.8.x; if a future cycle adds JP support, this FOLLOWUP closes by mirroring the JP vector file into `tests/`.
-- **Status:** `open` (deferred; product decision, not a regression).
+- **Status:** `resolved` (verified shipped 2026-11-28 incomplete-CLI survey: `CliLanguage::Japanese`, `language.rs:19`; Japanese `mnem` round-trips in `tests/cli_mnem_emit_preserve.rs`). The Japanese vector file named under What was not mirrored into `tests/`.
 - **Tier:** `v1+`
 - **Companion:** None (single-repo concern; `ms-codec` carries the wordlist plumbing).
 
@@ -1880,7 +1880,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs` `descriptor_mode_emit` (Phase C.6).
 - **What:** `engraving_card: None` for descriptor mode. The existing `engraving_card()` builder takes a `CliTemplate` + path-family + `EngravingMode`, which descriptor mode lacks. v0.3 ships without a descriptor-mode card; v0.4 should add a descriptor-aware engraving card (custom text including the descriptor string + per-cosigner xpub origins).
 - **Why deferred:** out of v0.3 scope; engraving card logic is template-coupled.
-- **Status:** `open`
+- **Status:** `resolved` (verified shipped 2026-11-28 incomplete-CLI survey: descriptor mode renders the unified card through `emit_unified` → `build_unified_card` with `TemplateOrDescriptor::Descriptor` (`cmd/bundle.rs:1357-1459`, `format.rs:265`)).
 - **Tier:** `v0.4`
 
 ### `engraving-card-unified-1-master-card` — Phase E unified engraving card deferred from v0.4.0 to v0.4.1
@@ -1889,7 +1889,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/format.rs::engraving_card` + `EngravingMode` enum + `crates/mnemonic-toolkit/src/cmd/bundle.rs` per-mode card emit sites.
 - **What:** SPEC §5.5 specifies a single unified `BundleInputForCard` shape + `engraving_card_unified` render function emitting one master card per bundle (in place of v0.2/v0.3's per-mode `EngravingMode` variants). Phase E was originally scoped to land this in v0.4.0 with deprecation of `EngravingMode::*`; deferred to v0.4.1 because it is tightly coupled to the BundleJson schema-4 cutover and the multi-source synthesis path (the unified card needs `MsField` + per-slot blocks). Will land in lockstep with `bundle-json-schema-4-cutover`.
 - **Why deferred:** scope-coupling to schema-4 cutover; foundation-only Phase D made standalone Phase E delivery low-value.
-- **Status:** `open`
+- **Status:** `resolved` (verified shipped 2026-11-28 incomplete-CLI survey: `engraving_card_unified` (`format.rs:256`), rendered for every bundle mode by `build_unified_card` (`cmd/bundle.rs:1357-1459`)).
 - **Tier:** `v0.4.1`
 
 ### `verify-bundle-9-3plus6n-forensics` — Phase G verify-bundle 9/3+6N parity + per-cell forensics deferred from v0.4.0 to v0.4.1
@@ -1898,7 +1898,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs::run_*` + `crates/mnemonic-toolkit/src/format.rs::VerifyCheck`.
 - **What:** SPEC §5.7 specifies (a) descriptor-mode emits the same 9 / 3+6N check schema as template-mode (replacing v0.3's 3-element coarse ladder), (b) `VerifyCheck` gains four forensic fields (`expected`, `actual`, `diff_byte_offset`, `decode_error`), (c) verify-bundle dispatches on `schema_version` for schema-4 BundleJson with per-slot `MsField` array. All three sub-deliverables depend on the schema-4 cutover landing first. Bip388-distinctness symmetric enforcement (SPEC §4.11.c) IS shipping in v0.4.0 (Phase A wired `Bip388VerifyDistinctness` into `descriptor_mode_verify_run`).
 - **Why deferred:** depends on `bundle-json-schema-4-cutover`; will land in lockstep with v0.4.1.
-- **Status:** `open`
+- **Status:** `resolved` (verified shipped 2026-11-28 incomplete-CLI survey: `emit_verify_checks` 9 / 3+6N emission (`cmd/verify_bundle.rs:2494`, `:2696`) and the `VerifyCheck` forensic fields (`format.rs:173`)).
 - **Tier:** `v0.4.1`
 
 ### `bundle-json-schema-4-cutover` — full BundleJson schema-4 cutover deferred from v0.4.0 to v0.4.1
@@ -1907,7 +1907,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/format.rs::BundleJson` + `crates/mnemonic-toolkit/src/cmd/bundle.rs::emit` + `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` + `crates/mnemonic-toolkit/src/synthesize.rs::Bundle`.
 - **What:** v0.4.0 ships the `MsField = Vec<String>` type alias + multi-source synthesis primitives as a foundation, but DEFERS the full `BundleJson.ms1: Option<String>` → `ms1: MsField` migration + `schema_version: "3" → "4"` bump + verify-bundle schema-4 dispatch to v0.4.1. v0.4.0 retains the schema-3 envelope so all existing v0.2/v0.3 fixtures + JSON integration tests pass byte-identically. v0.4.1 lands the cutover with: (a) BundleJson.ms1 → MsField; (b) Bundle.ms1 → Vec<String>; (c) all integration test JSON assertions updated; (d) verify-bundle schema_version dispatch (read schema_version FIRST per SPEC §5.6); (e) regenerate or update v0.2/v0.3 carry-forward tests under the new envelope shape per SPEC §5.6 cross-schema invariant; (f) synthesize_multisig_multisource + synthesize_multisig_hybrid wired into bundle::run via BundleMode dispatch (Phase C foundation already in place); (g) **bundle::run top-level dispatch rewiring**: in v0.4.0 `args.slot` is parsed by clap into `BundleArgs.slot: Vec<SlotInput>` but `bundle::run` itself never reads it. v0.4.1 must wire `expand_legacy_to_slots(args.slot, ...)` → `validate_slot_set(&slots)?` → `detect_bundle_mode(&slots)?` → match-arm dispatch into the new `synthesize_multisig_multisource` / `synthesize_multisig_hybrid` paths AND rewrite the legacy `bundle_full` / `bundle_watch_only` / `bundle_multisig_*` calls to flow through the same SlotInput-driven path. This is a top-level surgery in `cmd/bundle.rs::run` itself, not just additions to the synthesis helper crate.
 - **Why deferred:** scope risk in autonomous v0.4.0 release window — full surgery touches ≥10 source files + ~15 test assertions + fixture envelopes; landing without user oversight risks bugs the foundation-only approach avoids.
-- **Status:** `open`
+- **Status:** `resolved` (verified shipped 2026-11-28 incomplete-CLI survey: `BundleJson.ms1: MsField` (`format.rs:108`) and `schema_version: "4"` (`cmd/bundle.rs:1005`, `synthesize.rs:2226`)).
 - **Tier:** `v0.4.1`
 
 ### `bip388-distinctness-path-normalization-phase-b-decision` — typed-vs-raw path semantics in check_key_vector_distinctness
@@ -2019,7 +2019,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/verify_bundle.rs` (~78 VerifyCheck push sites) + new `emit_verify_checks` helper.
 - **What:** v0.4.1 ships the structural pieces of SPEC §5.7: VerifyCheck struct gains `expected` / `actual` / `diff_byte_offset` / `decode_error` Option fields with Default impl + serde skip_serializing_if (J.1), and the `--ms1` CLI repeating-flag migration (J.5). Forensic fields are populated on ONE prominent failure path (descriptor-mode `ms1_entropy_match` mismatch — proof-of-shape in cmd/verify_bundle.rs:1456-1469); the remaining ~70 push sites continue to default to `None` for forensic fields. The `emit_verify_checks` helper (J.2) and the run_full / run_multisig / descriptor_mode_verify_run refactor (J.3) to use it are deferred. Full per-cell forensics rollout requires the helper to land first; otherwise duplicating the population logic at every push site is unmaintainable.
 - **Why deferred:** scope-safety in v0.4.1 release window. The 78-site refactor is mechanical but error-prone; helper-first approach is the right shape and lands cleanly in v0.4.2.
-- **Status:** `open`
+- **Status:** `superseded` (see the Status line at the top of this entry) (verified shipped 2026-11-28 incomplete-CLI survey: `emit_verify_checks`, `cmd/verify_bundle.rs:2494`).
 - **Tier:** `v0.4.2`
 
 ### `verify-bundle-9-3plus6n-descriptor-mode-parity` — Phase G/J descriptor-mode 9/3+6N parity deferred from v0.4.1 to v0.4.2
@@ -2064,7 +2064,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::resolve_slots`.
 - **What:** v0.4.1's unified `--slot` dispatch (`bundle_run_unified`) supports two slot subkey shapes: `{phrase}` (BIP-39 → derived xpub) and `{xpub, fingerprint, path}` (watch-only with full origin metadata). The remaining SPEC §6.6.b shapes (`{entropy}` raw entropy → ms-codec ENTR; `{xprv}` xpriv-direct; `{wif}` degenerate single-key; `{xpub}` alone; `{xpub, fingerprint}`; `{xpub, path}`) return BadInput with a pointer to this FOLLOWUP. v0.4.2 lands the resolution logic for each shape + integration tests per shape.
 - **Why deferred:** scope-safety in v0.4.1 release window; the two supported shapes cover the headline multi-source-secrets and watch-only-multisig use cases.
-- **Status:** `open`
+- **Status:** `open` for `xprv` only (2026-11-28 incomplete-CLI survey: `entropy`, `wif` and the other shapes resolve in `slot_input.rs`; `--slot @N.xprv` is still refused at `cmd/bundle.rs:828-833`).
 - **Tier:** `v0.4.2`
 
 ### `unified-slot-descriptor-mode-support` — descriptor mode under unified --slot dispatch deferred from v0.4.1 to v0.4.2
@@ -2073,7 +2073,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/bundle.rs::bundle_run_unified`.
 - **What:** v0.4.1's unified `--slot` dispatch supports `--template` only; supplying `--descriptor` alongside `--slot` is rejected with a pointer to this FOLLOWUP. Legacy descriptor-mode dispatch (no `--slot`) continues to work via `descriptor_mode_run`. v0.4.2 unifies the two paths so `--slot` works with both `--template` and `--descriptor`, including descriptor-mode multi-source via per-`@N` slot binding.
 - **Why deferred:** scope-safety; the legacy descriptor-mode path remains the recommended invocation for descriptor-driven workflows in v0.4.1.
-- **Status:** `open`
+- **Status:** `resolved` (verified shipped 2026-11-28 incomplete-CLI survey: `bundle_run_unified_descriptor`, `cmd/bundle.rs:1480`).
 - **Tier:** `v0.4.2`
 
 ### `descriptor-binding-entropy-field-redundant` — DescriptorBinding.entropy field is redundant after v0.4.3 N
@@ -6794,7 +6794,7 @@ screen printed. Print the values.
 - [addresses-xpub-passphrase-check-order] status=open grade=M kind=secret owner=none filed=2026-11-19 src=coordinator/agent-reports/bughunt-1119-mn-regrade/tk-grade.md#bh-tk-M1 :: addresses resolves --passphrase-stdin/@env: (cmd/addresses.rs:147-148) before refusing a passphrase with --from xpub= (:165); move the conflict check first.
 - [coldcard-multisig-cosigner-count-u8-wrap] status=open grade=M kind=input owner=none filed=2026-11-19 src=coordinator/agent-reports/bughunt-1119-mn-regrade/tk-grade.md#bh-tk-M2 :: coldcard_multisig.rs:376 compares cosigners_raw.len() as u8 with policy.n (259 wraps to 3); compare as usize so the policy-count refusal names declared and found counts.
 - [addresses-seedqr-language-misleading-refusal] status=open grade=M kind=ux owner=none filed=2026-11-19 src=coordinator/agent-reports/bughunt-1119-mn-regrade/tk-grade.md#bh-tk-M3 :: addresses --from seedqr= with a non-English --language decodes English words then reparses in that language and refuses with a word error; refuse non-English --language for seedqr= by name and fix help addresses.rs:68 (manual lockstep).
-- [import-wallet-help-bsms-only-stale] status=open grade=M kind=docs owner=none filed=2026-11-19 src=coordinator/agent-reports/bughunt-1119-mn-regrade/tk-grade.md#bh-tk-M4 :: main.rs:132 help says import-wallet is BSMS Round-2 only and import_wallet.rs:138 calls shipped parsers pre-stubbed (and omits descriptor); rewrite to the shipped format list (manual lockstep).
+- [import-wallet-help-bsms-only-stale] status=closed@4b7a4de5 grade=M kind=docs owner=none filed=2026-11-19 src=coordinator/agent-reports/bughunt-1119-mn-regrade/tk-grade.md#bh-tk-M4 :: main.rs:132 help says import-wallet is BSMS Round-2 only and import_wallet.rs:138 calls shipped parsers pre-stubbed (and omits descriptor); rewrite to the shipped format list (manual lockstep).
 - [dice-length-red-row-ulimit-false-pass] status=open grade=M kind=test owner=none filed=2026-11-19 src=coordinator/agent-reports/bughunt-1119-mn-regrade/tk-grade.md#bh-tk-M5 refs=derive-child-dice-length-cap :: tests/bughunt_s4.rs:58-110 passes when ulimit -v fails (sh exits non-zero, no signal); assert the --length refusal text or exact exit code.
 - [seedqr-module-doc-word-counts] status=open grade=N kind=docs owner=none filed=2026-11-19 src=coordinator/agent-reports/bughunt-1119-mn-regrade/tk-grade.md#bh-tk-N1 :: src/seedqr.rs:9 says 12 + 24 words only; decode accepts 12/15/18/21/24 (48-96 digits).
 - [restore-wallet-id-spec-stale-citations] status=open grade=N kind=docs owner=none filed=2026-11-19 src=coordinator/agent-reports/bughunt-1119-mn-regrade/tk-grade.md#bh-tk-N2 :: design/SPEC_restore_wallet_id_prefix_enumerate.md cites restore.rs line numbers (28 cites) that spec-citation-gate.py reports stale; re-anchor them.

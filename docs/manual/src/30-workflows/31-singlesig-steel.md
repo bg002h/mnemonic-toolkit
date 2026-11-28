@@ -50,13 +50,18 @@ in your head; the scratch paper is destroyed at the end.
 ## Step 2 — synthesise the bundle
 
 ```sh
-mnemonic bundle \
-  --network mainnet \
-  --template bip84 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-  --self-check \
-  > bundle.txt
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic bundle \
+      --network mainnet \
+      --template bip84 \
+      --slot @0.phrase=- \
+      --self-check \
+      > bundle.txt
 ```
+
+The phrase arrives on stdin (`--slot @0.phrase=-`): `mnemonic` refuses a
+phrase typed on the command line (exit 2), where other processes could
+read it. See [Secret material on argv is REFUSED](#argv-refusal).
 
 Three additions vs. [Your first bundle](#your-first-bundle):
 
@@ -77,11 +82,12 @@ Three additions vs. [Your first bundle](#your-first-bundle):
 `mnemonic verify-bundle`:
 
 ```sh
-MS1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f \
-mnemonic verify-bundle \
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | MS1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f \
+    mnemonic verify-bundle \
   --network mainnet \
   --template bip84 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
+  --slot @0.phrase=- \
   --ms1 @env:MS1 \
   --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
   --mk1 mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh \

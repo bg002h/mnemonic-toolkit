@@ -48,7 +48,7 @@ non-load-bearing.
 
 The separator is **whitespace only**. `--separator hyphen` and
 `--separator comma` were retired: a card is what a human types back into
-*another* tool, and `mt` strips whitespace and nothing else, so a
+*another* tool, and [`mt`](#mt-mt-cli-reference) strips whitespace and nothing else, so a
 hyphen-grouped card round-trips here and is refused there. Cards you
 already hold still decode — intake keeps stripping `-` and `,`.
 

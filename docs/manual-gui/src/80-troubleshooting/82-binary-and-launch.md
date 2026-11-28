@@ -130,8 +130,11 @@ Then `ms`, eight outputs:
   exits 3 with nothing on stdout, and now prints `error: tag "seed"
   reserved-not-emitted in v0.1; deferred to v0.2+` on stderr, where
   the output panel showed nothing. With `--json` the output is
-  unchanged, and `ms verify` still prints `OK: valid future format
-  (v0.2+, tag seed)` and exits 3.
+  unchanged. Since mnemonic-secret PR #52, `ms verify` behaves the same
+  way: it no longer prints `OK: valid future format (v0.2+, tag seed)`,
+  and the refusal now reads `error: tag "seed" is planned but not yet
+  supported by this ms (no seed or xprv card can be read yet); nothing
+  was checked`, exit 3.
 
 Then `mk`, seven outputs:
 

@@ -65,7 +65,9 @@ printf 'YOUR-PASSPHRASE' |
 ```
 
 If your seed lives on an `ms1` card rather than as words, restore reads
-it directly — `--from ms1=ms10entr…` (or `--from ms1=-` to pipe it).
+it directly — `--from ms1=-` reads the card from stdin, or
+`--from ms1=@env:VAR` from the environment (a card typed on the command
+line is refused, exit 2).
 Restore is **watch-only-out and never signs** — it emits public keys,
 addresses, and descriptors only, never `xprv` or WIF. To get an
 importable wallet file rather than a bare descriptor, add `--format`
@@ -94,40 +96,37 @@ for the full reference.
 
 ## Single-sig wallet — single card lost
 
-**Lost ms1**: re-derive from the seed phrase you remember:
+**Lost ms1**: re-derive from the seed phrase you remember (read from
+stdin; a phrase on the command line is refused):
 
 ```sh
-mnemonic convert \
-  --from phrase="<your phrase>" \
-  --to ms1
+printf '%s' '<your phrase>' \
+  | mnemonic convert \
+      --from phrase=- \
+      --to ms1
 ```
 
 Re-stamp.
 
-**Lost mk1**: re-derive from the seed:
+**Lost mk1 or md1**: re-run the bundle from the seed. `convert --to mk1`
+cannot do this (an mk1 binds its xpub to the wallet policy, so only
+`bundle` emits one):
 
 ```sh
-mnemonic convert \
-  --from phrase="<your phrase>" \
-  --to mk1 \
-  --template bip84
-```
-
-Re-stamp.
-
-**Lost md1**: derive a new one from xpub:
-
-```sh
-xpub=$(mnemonic convert --from phrase="<your phrase>" --to xpub --template bip84)
-mnemonic bundle \
-  --network mainnet \
-  --template bip84 \
-  --slot @0.xpub=$xpub
+printf '%s' '<your phrase>' \
+  | mnemonic bundle \
+      --network mainnet \
+      --template bip84 \
+      --slot @0.phrase=-
 ```
 
 The `mk1` and `md1` emitted should match the originals (cross-check
 with `verify-bundle` before discarding the originals); re-stamp the
-md1 and the mk1 stays intact.
+lost card. To keep the seed off the bundling host, run the watch-only
+form there instead, `--slot @0.xpub=<xpub> --slot @0.fingerprint=<fingerprint>`,
+with both values from `mnemonic convert --from phrase=- --to xpub --to
+fingerprint --template bip84` on the seed-holding machine. Without the
+fingerprint the cards record `00000000` and do not match the originals.
 
 ## Single-sig wallet — seed is the only thing left
 
@@ -175,13 +174,15 @@ mnemonic bundle \
   --network mainnet \
   --template wsh-sortedmulti \
   --threshold 2 \
-  --slot @0.xpub=<xpub-0> \
-  --slot @1.xpub=<xpub-1> \
-  --slot @2.xpub=<xpub-2>
+  --slot @0.xpub=<xpub-0> --slot @0.fingerprint=<fingerprint-0> \
+  --slot @1.xpub=<xpub-1> --slot @1.fingerprint=<fingerprint-1> \
+  --slot @2.xpub=<xpub-2> --slot @2.fingerprint=<fingerprint-2>
 ```
 
 The cross-binding `policy_id_stub` re-derives identically as long as
-the cosigner xpubs and template are unchanged.
+the cosigner xpubs, their master fingerprints (each mk1 card carries
+its cosigner's) and the template are unchanged. A slot given without
+`@N.fingerprint` records `00000000` and the cards no longer match.
 
 ## Multisig wallet — partial card damage
 
@@ -204,8 +205,8 @@ Outputs (a 49-character string — one short of the canonical
 
 (The `--from ms1=-` form reads the string from stdin so it never
 lands in `/proc/$PID/cmdline`; passing it inline via
-`--from ms1=<string>` works too but prints a secret-on-argv
-warning.)
+`--from ms1=<string>` is refused at exit 2 before the command line is
+parsed.)
 
 If the length is correct but a character is wrong, the codex32
 checksum gate rejects it — an out-of-charset or wrong-case symbol

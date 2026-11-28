@@ -383,7 +383,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--json` | emit JSON output |
 | `--no-engraving-card` | suppress the stderr engraving-card layout |
 | `--group-size <N>` | mstring display grouping: insert a separator every N characters in the emitted `ms1`/`mk1`/`md1` card strings; `0` = unbroken (**default 0** — pass `5` for the engraving-friendly five-character groups). Display only — `--json` and `verify-bundle` forensic strings always stay unbroken. The same flag (with `--separator`) is also accepted on `convert` (when emitting an `ms1`/`mk1` card) and on `ms-shares split` / `ms-shares combine --to ms1`. |
-| `--separator <space>` | the grouping separator for `--group-size` (default `space`); accepts the keyword `space` or the literal `" "`. **Whitespace only**: `hyphen` and `comma` were retired, because `mt`'s decoder strips whitespace and nothing else, so a hyphen-grouped card round-trips here and is refused there. Intake still strips `-` and `,`, so cards grouped by an older build still decode. |
+| `--separator <space>` | the grouping separator for `--group-size` (default `space`); accepts the keyword `space` or the literal `" "`. **Whitespace only**: `hyphen` and `comma` were retired, because [`mt`](#mt-mt-cli-reference)'s decoder strips whitespace and nothing else, so a hyphen-grouped card round-trips here and is refused there. Intake still strips `-` and `,`, so cards grouped by an older build still decode. |
 | `--multisig-path-family <FAMILY>` | bip48 or bip87 (default bip87) |
 | `--privacy-preserving` | suppress the master fingerprint from mk1 + engraving card |
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
@@ -763,16 +763,14 @@ Things to notice in the envelope:
   their own machine; produces the same `ms1[i]` byte content):
 
   ```sh
-  # Cosigner @1 generates their personal ms1 backup
-  mnemonic convert \
-    --from phrase='legal winner thank year wave sausage worth useful legal winner thank yellow' \
-    --to ms1
+  # Cosigner @1 generates their personal ms1 backup (phrase on stdin)
+  printf '%s' 'legal winner thank year wave sausage worth useful legal winner thank yellow' \
+    | mnemonic convert --from phrase=- --to ms1
   # → ms1: ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6
 
   # Cosigner @2 generates theirs
-  mnemonic convert \
-    --from phrase='letter advice cage absurd amount doctor acoustic avoid letter advice cage above' \
-    --to ms1
+  printf '%s' 'letter advice cage absurd amount doctor acoustic avoid letter advice cage above' \
+    | mnemonic convert --from phrase=- --to ms1
   # → ms1: ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu
   ```
 
@@ -1439,7 +1437,8 @@ PLACEHOLDER — generated from transcripts/41-restore-bip84.out at build
 Stderr carries the watch-only advisory (`note: stdout is watch-only —
 public keys only, cannot spend`). Piping the seed via `--from phrase=-`
 keeps it off the argv; passing `--from phrase="$seed"` inline instead
-raises a `/proc/$PID/cmdline` argv-leakage advisory on stderr.
+is refused at exit 2 before the command line is parsed (see
+[Secret material on argv is REFUSED](#argv-refusal)).
 
 **All four wallet types** (omit `--template`):
 
@@ -1668,8 +1667,10 @@ tr(UNSPENDABLE(liana),…)`).
 ## `mnemonic import-wallet`
 
 Import a third-party wallet blob into an m-format bundle. Parses a
-foreign wallet export (BSMS Round-2 per BIP-129, or Bitcoin Core's
-`listdescriptors` JSON), reconstructs the equivalent watch-only
+foreign wallet export (BSMS Round-2 per BIP-129, Bitcoin Core's
+`listdescriptors` JSON, a Coldcard single-sig or multisig export, a
+bare descriptor file, or an Electrum, Jade, Sparrow or Specter export),
+reconstructs the equivalent watch-only
 bundle, and round-trips it back through the toolkit canonicalizer
 to surface byte-exact vs semantic-only equivalence (see [foreign
 wallet formats](#foreign-wallet-formats) for the format taxonomy).
@@ -1677,9 +1678,10 @@ wallet formats](#foreign-wallet-formats) for the format taxonomy).
 See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
 for the non-blocking `older()` advisory this command emits on intake.
 
-v0.26.0 ships two source formats — `bsms` and `bitcoin-core` —
-selectable via `--format` or auto-detected by sniff. Both formats
-are watch-only by design; the resulting bundle's cosigners carry no
+Nine source formats are accepted — `bitcoin-core`, `bsms`, `coldcard`,
+`coldcard-multisig`, `descriptor`, `electrum`, `jade`, `sparrow` and
+`specter` — selectable via `--format` or auto-detected by sniff
+(`descriptor` is explicit-only). All are watch-only by design; the resulting bundle's cosigners carry no
 secret material unless the user supplies an `--ms1` / `--slot
 @N.phrase=` seed overlay (see [seed overlay](#mnemonic-import-wallet-seed-overlay)).
 Bitcoin Core blobs containing `xprv` extended private keys are
@@ -1998,7 +2000,7 @@ mnemonic electrum-decrypt --ciphertext <VALUE|-> (--decrypt-password <VAL> | --d
 | Flag | Purpose |
 |---|---|
 | `--ciphertext <VALUE\|->` | the Electrum field-encrypted secret as base64; `-` reads from stdin. NOT secret (it is ciphertext) — no argv advisory |
-| `--decrypt-password <VALUE>` | decryption password; `-` reads stdin, `@env:VAR` the environment (the `--passphrase` rule); any other value emits an argv-leakage advisory. Exactly one password form is required |
+| `--decrypt-password <VALUE>` | decryption password; `-` reads stdin, `@env:VAR` the environment (the `--passphrase` rule); any other value is refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory. Exactly one password form is required |
 | `--decrypt-password-file <PATH>` | read the password from a file (single trailing newline stripped) |
 | `--decrypt-password-stdin` | read the password from stdin (raw, NULL-byte preserving); single stdin per invocation (mutually exclusive with `--ciphertext -`) |
 | `--json-out <PATH>` | emit a JSON envelope (`{schema_version, operation, plaintext}`; no password echo) instead of plain text on stdout; emits a world-readable-permissions advisory if the file is group/other-readable |
@@ -2052,7 +2054,7 @@ mnemonic final-word --from <phrase=<value-or-->> [--language <LANGUAGE>] [--json
 
 | Flag | Purpose |
 |---|---|
-| `--from <phrase=<value-or-->>` | partial phrase as `phrase=<N-1 words>` (inline) or `phrase=-` to read from stdin; inline form emits a `/proc/$PID/cmdline` argv-leakage advisory on stderr |
+| `--from <phrase=<value-or-->>` | partial phrase as `phrase=-` to read from stdin (or `phrase=@env:VAR`); the inline `phrase=<N-1 words>` form is refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory |
 | `--language <LANGUAGE>` | BIP-39 wordlist; one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish` (default `english`) |
 | `--json-out <PATH>` | side-effect: write a versioned JSON envelope to `<PATH>` in addition to the plain candidate list on stdout; on Unix a world-readable result raises a permission-mode advisory |
 | `--help` | print help |
@@ -2103,7 +2105,7 @@ stdout-replacement).
 
 | Trigger | Stderr advisory |
 |---|---|
-| Inline `--from phrase=<value>` | `warning: secret material on argv (--from phrase=) — pipe via --from phrase=- to avoid /proc/$PID/cmdline exposure` |
+| Inline `--from phrase=<value>` **with `--allow-argv-secret`** (without it the value is refused at exit 2 before parsing; see [argv refusal](#argv-refusal)) | `warning: secret material on argv (--from phrase=) — pipe via --from phrase=- to avoid /proc/$PID/cmdline exposure` |
 | Stdout is a TTY AND candidate set non-empty | `warning: candidate list is secret material — pairing the partial phrase with any candidate yields a valid seed phrase; do not paste this output into untrusted tools` |
 | `--json-out PATH` with world-readable file (Unix umask 022 default) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 
@@ -2137,7 +2139,7 @@ mnemonic seed-xor combine --share <phrase=<value-or-->> ... --shares <N> [OPTION
 
 | Flag | Purpose |
 |---|---|
-| `--from <phrase=<value-or-->>` | master phrase as `phrase=<value>` (inline) or `phrase=-` to read from stdin; inline form emits a `/proc/$PID/cmdline` argv-leakage advisory on stderr |
+| `--from <phrase=<value-or-->>` | master phrase as `phrase=-` to read from stdin (or `phrase=@env:VAR`); the inline `phrase=<value>` form is refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory |
 | `--shares <N>` | number of shares to emit; must be >= 2 |
 | `--language <LANGUAGE>` | BIP-39 wordlist: `english` (default) / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish` |
 | `--deterministic-from-master` | use Coldcard's SHA256d-deterministic share generation instead of OS CSPRNG; required for byte-equal Coldcard hardware interop |
@@ -2228,7 +2230,7 @@ Field order is part of the schema (SHA-pinned in
 
 | Trigger | Stderr advisory |
 |---|---|
-| Inline `--from phrase=<v>` OR inline `--share phrase=<v>` | `warning: secret material on argv (--from phrase= OR --share phrase=) — pipe via phrase=- to avoid /proc/$PID/cmdline exposure` (per-occurrence) |
+| Inline `--from phrase=<v>` OR inline `--share phrase=<v>`, **with `--allow-argv-secret`** (without it the value is refused at exit 2 before parsing; see [argv refusal](#argv-refusal)) | `warning: secret material on argv (--from phrase= OR --share phrase=) — pipe via phrase=- to avoid /proc/$PID/cmdline exposure` (per-occurrence) |
 | `split` AND stdout is a TTY | `warning: Seed XOR shares on stdout — each of the N=<n> lines is independently a complete BIP-39 phrase; ALL N shares are required to reconstruct the master; distribute them to N separate locations; do not paste this output into a single untrusted tool. Substitution of a wrong-but-valid-BIP-39 share is undetectable by Seed XOR — verify the recovered wallet's derived address before trusting it.` |
 | `combine` AND stdout is a TTY | `warning: combined phrase is secret material — Seed XOR has no authentication tag; verify the recovered wallet's expected derived address before trusting; if a share was substituted with a wrong-but-valid one, the result will validate but derive the wrong wallet` |
 | `split --deterministic-from-master` with 15/21-word input | `warning: --deterministic-from-master with 15-word input is toolkit-only — Coldcard's xor_seed.py natively supports 12/18/24 only; resulting shares will NOT round-trip a Coldcard device. For Coldcard interop, use 12/18/24-word input.` |
@@ -2366,18 +2368,19 @@ Adds a SLIP-39 passphrase. Same threshold shape as example 1; only
 the passphrase differs.
 
 ```sh
+export SLIP39_PASS=TREZOR
 echo "abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon art" |
   mnemonic slip39 split --from phrase=- --group-threshold 1 --group 2,2 \
-    --passphrase TREZOR
+    --passphrase @env:SLIP39_PASS
 ```
 
 Stdout: 2 shares. Reverse with both + the matching passphrase:
 
 ```sh
 mnemonic slip39 combine --share "<share-1>" --share "<share-2>" \
-  --passphrase TREZOR --to phrase --language english
+  --passphrase @env:SLIP39_PASS --to phrase --language english
 ```
 
 Stdout: the original 24-word phrase.
@@ -2390,11 +2393,13 @@ Stdout: the original 24-word phrase.
 > verify the recovered wallet's expected derived address before
 > trusting.
 >
-> **Argv-leakage advisory:** `--passphrase TREZOR` is on argv and
-> visible in `/proc/$PID/cmdline`; the toolkit emits
-> `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` on stderr.
-> For sensitive use, pass `--passphrase -` (or `--passphrase-stdin`) and
-> pipe it, or use `--passphrase @env:VAR`.
+> **Passphrase on argv:** the passphrase comes from the environment
+> (`--passphrase @env:SLIP39_PASS`) because a literal `--passphrase TREZOR`
+> is refused at exit 2 before the command line is parsed, like every
+> inline secret (see [Secret material on argv is REFUSED](#argv-refusal)).
+> Only with `--allow-argv-secret` does a literal run, and then the toolkit
+> emits `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` on stderr.
+> When stdin is free, `--passphrase -` (or `--passphrase-stdin`) works too.
 
 #### Example 3 — standard 2-of-3 single group, no passphrase
 
@@ -2444,8 +2449,10 @@ abandon abandon abandon abandon abandon abandon abandon art" |
   mnemonic slip39 split --from phrase=- \
     --group-threshold 2 \
     --group 3,2 --group 3,2 --group 3,2 \
-    --passphrase TREZOR
+    --passphrase @env:SLIP39_PASS
 ```
+
+(`SLIP39_PASS=TREZOR`, exported as in example 2.)
 
 Stdout: 9 shares in group-major order, with a blank-line separator
 between groups (the Trezor interop recipe below relies on this layout
@@ -2472,7 +2479,7 @@ unused — the group threshold of 2 is satisfied by groups 0 + 1):
 mnemonic slip39 combine \
   --share "<g0-m0>" --share "<g0-m1>" \
   --share "<g1-m0>" --share "<g1-m1>" \
-  --passphrase TREZOR --to phrase --language english
+  --passphrase @env:SLIP39_PASS --to phrase --language english
 ```
 
 Stdout: the original 24-word phrase. Many valid 4-share subsets exist
@@ -2602,8 +2609,8 @@ test build, and a shipped binary refuses those variables (see Refusals).
 
 | Trigger | Stderr advisory |
 |---|---|
-| Inline secret on argv (`--from`, `--share`) | per-occurrence `warning: secret material on argv (<flag>) — pipe via <alternative> to avoid /proc/$PID/cmdline exposure` |
-| Literal `--passphrase <v>` (not `-`, not `@env:VAR`) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
+| Inline secret on argv (`--from`, `--share`), **with `--allow-argv-secret`** (without it: refused at exit 2 before parsing; see [argv refusal](#argv-refusal)) | per-occurrence `warning: secret material on argv (<flag>) — pipe via <alternative> to avoid /proc/$PID/cmdline exposure` |
+| Literal `--passphrase <v>` (not `-`, not `@env:VAR`) **with `--allow-argv-secret`** (without it: refused at exit 2 before parsing) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | `split` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: each share is secret material — distribute across separate locations; SLIP-39 shares have no authentication tag` |
 | `combine` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: verify the recovered wallet's expected derived address before trusting` |
 | `--json-out` to a world-readable path (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
@@ -2626,8 +2633,11 @@ pipx install 'shamir-mnemonic[cli]==0.3.0'
 
 # Produce shares with the toolkit (using example 4's shape: multi-group
 # 2-of-3 of 2-of-3 with passphrase=TREZOR, master = abandon × 23 + art)
+# (stdin carries the passphrase, so the master phrase comes from the
+# environment: a phrase on the command line is refused.)
+export MASTER='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art'
 printf 'TREZOR' | mnemonic slip39 split \
-  --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art" \
+  --from phrase=@env:MASTER \
   --group-threshold 2 \
   --group 3,2 --group 3,2 --group 3,2 \
   --passphrase-stdin > /tmp/shares.txt
@@ -2657,7 +2667,7 @@ Your master secret is: 000000000000000000000000000000000000000000000000000000000
 That hex (32 zero bytes) is the BIP-39 entropy of `abandon × 23 + art`
 — the same master `mnemonic slip39 combine` recovers from the same
 shares + passphrase. Convert to phrase form via
-`mnemonic convert --from entropy=00...00 --to phrase` if desired.
+`printf '%s' 00...00 | mnemonic convert --from entropy=- --to phrase` if desired.
 
 **Version-pin caveat:** the recipe pins `shamir-mnemonic==0.3.0` (the
 latest released PyPI version at chapter-write 2026-05-14). The
@@ -2730,7 +2740,7 @@ mnemonic ms-shares combine --share <ms1-share-or-> ... [OPTIONS]
 
 | Flag | Purpose |
 |---|---|
-| `--from <phrase=…\|entropy=…>` | secret as `phrase=<value-or->` or `entropy=<hex-or->`; `=-` reads from stdin. Inline forms emit an argv-leakage advisory |
+| `--from <phrase=…\|entropy=…>` | secret as `phrase=<value-or->` or `entropy=<hex-or->`; `=-` reads from stdin. Inline forms are refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory |
 | `--threshold <K>` | threshold K — minimum shares needed to recombine (2..=9) |
 | `--shares <N>` | total shares N to emit (K ≤ N ≤ 31) |
 | `--language <LANGUAGE>` | BIP-39 wordlist of the input phrase; ignored for `entropy=` inputs. A non-English language produces a `mnem` share-set so the wordlist survives the split |
@@ -2786,8 +2796,8 @@ for 64 hex chars or `--to ms1` for a single recovered ms1 string.)
 
 > **Compose with `bundle`.** A recovered single-string ms1
 > (`combine --to ms1`) is a normal `ms1` card payload — feed it to
-> `mnemonic bundle --slot @0.ms1=<recovered-ms1>` to rebuild the rest of
-> the bundle.
+> `mnemonic bundle --slot @0.ms1=-` (the card on stdin) to rebuild the rest
+> of the bundle.
 
 ### Non-English (`mnem`) split
 
@@ -3069,7 +3079,10 @@ is required (clap arg-group; missing/multiple → exit 64).
 ### Secret-handling notes
 
 - `--secret` passes the key via process arguments, which are visible in
-  `/proc/$PID/cmdline` and `ps` output. The toolkit emits a warning:
+  `/proc/$PID/cmdline` and `ps` output, so an inline `--secret <value>` is
+  refused at exit 2 before the command line is parsed (see
+  [Secret material on argv is REFUSED](#argv-refusal)). With
+  `--allow-argv-secret` it runs and the toolkit warns:
   `warning: secret material on argv (--secret) — pipe via --secret-stdin
   to avoid /proc/$PID/cmdline exposure`. Prefer `--secret-stdin` or
   `--secret-file` in scripts and when a shoulder-surfing observer is a
@@ -3801,7 +3814,7 @@ consumed natively per the unchanged Mk1 branch).
 |---|---|
 | Corrected `ms1` emitted to stdout | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` |
 | Repair fired and emitted ≥ 1 correction | `repair: applied K correction(s) across J chunk(s)` |
-| Inline `--ms1 <value>` or an `ms1`-classified positional on argv (v0.53.2) | `warning: secret material on argv (--ms1) — pipe via --ms1 - to avoid /proc/$PID/cmdline exposure` (per-occurrence; positionals are labelled `(positional ms1)`; fires for `--ms1` even under `--max-indel` relaxation, where the corrupted value no longer HRP-classifies) |
+| An `ms1`-classified positional on argv (v0.53.2), or an inline `--ms1 <value>` **with `--allow-argv-secret`** (without it the inline `--ms1` is refused at exit 2 before parsing; see [argv refusal](#argv-refusal)) | `warning: secret material on argv (--ms1) — pipe via --ms1 - to avoid /proc/$PID/cmdline exposure` (per-occurrence; positionals are labelled `(positional ms1)`; fires for `--ms1` even under `--max-indel` relaxation, where the corrupted value no longer HRP-classifies) |
 
 ### Recovering an incorrect-length card (`--max-indel`) {#mnemonic-repair-max-indel}
 
@@ -4082,7 +4095,7 @@ the full per-error taxonomy.
 | Trigger | Stderr advisory |
 |---|---|
 | Any `ms1` inspection (regardless of `--reveal-secret`) | `warning: stdout carries private key material (can spend) — redirect or encrypt ...` |
-| Inline `--ms1 <value>` or an `ms1`-classified positional on argv (v0.53.2) | `warning: secret material on argv (--ms1) — pipe via --ms1 - to avoid /proc/$PID/cmdline exposure` (per-occurrence; positionals are labelled `(positional ms1)`) |
+| An `ms1`-classified positional on argv (v0.53.2), or an inline `--ms1 <value>` **with `--allow-argv-secret`** (without it the inline `--ms1` is refused at exit 2 before parsing; see [argv refusal](#argv-refusal)) | `warning: secret material on argv (--ms1) — pipe via --ms1 - to avoid /proc/$PID/cmdline exposure` (per-occurrence; positionals are labelled `(positional ms1)`) |
 
 Card intake is case-tolerant (v0.53.3 routing; `ms1` end-to-end since v0.53.5):
 all-uppercase cards — the BIP-173 QR alphanumeric form — are routed to the
@@ -4123,12 +4136,12 @@ mnemonic xpub-search path-of-xpub \
 
 | Flag | Purpose |
 |---|---|
-| `--phrase <PHRASE>` | master BIP-39 phrase (inline); emits argv-leakage advisory; prefer `--phrase-stdin` |
+| `--phrase <PHRASE>` | master BIP-39 phrase (inline); refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory; use `--phrase-stdin` |
 | `--phrase-stdin` | read master BIP-39 phrase from stdin |
-| `--ms1 <MS1>` | ms1 card carrying BIP-39 entropy (inline); emits argv-leakage advisory |
+| `--ms1 <MS1>` | ms1 card carrying BIP-39 entropy (inline); refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory; use `--ms1-stdin` |
 | `--ms1-stdin` | read ms1 card from stdin (single chunk) |
 | `<positional MS1>` | positional ms1 card (HRP-autodetect). BIP-39 phrase text is NOT accepted positionally (no HRP for autodetect) |
-| `--passphrase <P>` | BIP-39 passphrase; `-` reads stdin, `@env:VAR` the environment; any other (literal) value emits the argv-leakage advisory |
+| `--passphrase <P>` | BIP-39 passphrase; `-` reads stdin, `@env:VAR` the environment; any other (literal) value is refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory |
 | `--passphrase-stdin` | read BIP-39 passphrase from stdin (NULL-byte-preserving; single trailing newline stripped) |
 | `--target-xpub <XPUB-OR-MK1>` | target xpub (any SLIP-0132 prefix: `xpub`/`tpub`/`ypub`/`Ypub`/`zpub`/`Zpub`/`upub`/`Upub`/`vpub`/`Vpub`) OR an `mk1...` bech32 card carrying an xpub |
 | `--language <LANGUAGE>` | BIP-39 wordlist (default `english`; same options as `seed-xor`) |
@@ -4225,9 +4238,9 @@ demotion](#mnemonic-repair-ms1-substitution-demotion).
 
 | Trigger | Stderr advisory |
 |---|---|
-| Inline `--phrase <v>` | `warning: secret material on argv (--phrase) — pipe via --phrase-stdin to avoid /proc/$PID/cmdline exposure` |
-| Inline `--ms1 <v>` | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
-| Literal `--passphrase <v>` (not `-`, not `@env:VAR`) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
+| Inline `--phrase <v>` **with `--allow-argv-secret`** (without it: refused at exit 2 before parsing) | `warning: secret material on argv (--phrase) — pipe via --phrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--ms1 <v>` **with `--allow-argv-secret`** (without it: refused at exit 2 before parsing) | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
+| Literal `--passphrase <v>` (not `-`, not `@env:VAR`) **with `--allow-argv-secret`** (without it: refused at exit 2 before parsing) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 
 #### Candidate path set
 
@@ -4481,12 +4494,12 @@ mnemonic xpub-search passphrase-of-xpub \
 
 | Flag | Purpose |
 |---|---|
-| `--phrase <PHRASE>` | master BIP-39 phrase (inline); emits argv-leakage advisory; prefer `--phrase-stdin` |
+| `--phrase <PHRASE>` | master BIP-39 phrase (inline); refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory; use `--phrase-stdin` |
 | `--phrase-stdin` | read master BIP-39 phrase from stdin |
-| `--ms1 <MS1>` | ms1 card carrying BIP-39 entropy (inline); emits argv-leakage advisory |
+| `--ms1 <MS1>` | ms1 card carrying BIP-39 entropy (inline); refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory; use `--ms1-stdin` |
 | `--ms1-stdin` | read ms1 card from stdin (single chunk) |
 | `<positional MS1>` | positional ms1 card (HRP-autodetect). BIP-39 phrase text is NOT accepted positionally (no HRP for autodetect) |
-| `--passphrase <P>` | BIP-39 passphrase; `-` reads stdin, `@env:VAR` the environment; any other (literal) value emits the argv-leakage advisory. One of the mandatory passphrase-source group |
+| `--passphrase <P>` | BIP-39 passphrase; `-` reads stdin, `@env:VAR` the environment; any other (literal) value is refused at exit 2 before parsing (see [argv refusal](#argv-refusal)); only `--allow-argv-secret` admits it, with an argv-leakage advisory. One of the mandatory passphrase-source group |
 | `--passphrase-stdin` | read BIP-39 passphrase from stdin (NULL-byte-preserving; single trailing newline stripped). One of the mandatory passphrase-source group |
 | `--passphrase-candidates-file <PATH>` | scan a text file of candidate passphrases (one per line, no argv exposure); first match wins, reports the file line (passphrase only in `--json`); exit 4 if none match. One of the mandatory passphrase-source group |
 | `--target-xpub <XPUB-OR-MK1>` | target xpub (any SLIP-0132 prefix: `xpub`/`tpub`/`ypub`/`Ypub`/`zpub`/`Zpub`/`upub`/`Upub`/`vpub`/`Vpub`) OR an `mk1...` bech32 card carrying an xpub |
@@ -4520,9 +4533,12 @@ PHRASE="abandon abandon abandon abandon abandon abandon abandon abandon abandon 
 
 # Suppose a wallet's account-0 zpub was derived from this seed + passphrase "satoshi".
 # Verify by supplying the passphrase + the target xpub:
-mnemonic xpub-search passphrase-of-xpub \
-    --phrase "$PHRASE" \
-    --passphrase satoshi \
+# The phrase goes on stdin and the passphrase in the environment: either
+# one typed on the command line is refused (exit 2).
+export PASS=satoshi
+printf '%s' "$PHRASE" | mnemonic xpub-search passphrase-of-xpub \
+    --phrase-stdin \
+    --passphrase @env:PASS \
     --target-xpub "$ZPUB"
 ```
 
@@ -4631,9 +4647,9 @@ substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion).
 
 | Trigger | Stderr advisory |
 |---|---|
-| Inline `--phrase <v>` | `warning: secret material on argv (--phrase) — pipe via --phrase-stdin to avoid /proc/$PID/cmdline exposure` |
-| Inline `--ms1 <v>` | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
-| Literal `--passphrase <v>` (not `-`, not `@env:VAR`) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
+| Inline `--phrase <v>` **with `--allow-argv-secret`** (without it: refused at exit 2 before parsing) | `warning: secret material on argv (--phrase) — pipe via --phrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--ms1 <v>` **with `--allow-argv-secret`** (without it: refused at exit 2 before parsing) | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
+| Literal `--passphrase <v>` (not `-`, not `@env:VAR`) **with `--allow-argv-secret`** (without it: refused at exit 2 before parsing) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | Every invocation (before search starts) | `note: passphrase verification searches the standard BIP-44/49/84/86 + BIP-48 templates × account range; if the wallet uses a non-standard path, supply --add-path or use \`xpub-search path-of-xpub\` to find the path first.` |
 
 ## `mnemonic compare-cost`

@@ -1,4 +1,4 @@
-//! `mnemonic restore` — watch-only single-sig restore document.
+//! `mnemonic restore` — watch-only restore document (single-sig, or multisig via `--md1`).
 //!
 //! Takes secret seed material (`ms1`/`phrase`/`entropy`/`seedqr`) + an optional
 //! BIP-39 passphrase and emits a watch-only "restore document" to facilitate
@@ -11,7 +11,8 @@
 //! (`feedback_no_signing_read_only_derivation_boundary`). Derivation uses a
 //! verification-only secp context and NEVER touches `account_xpriv`.
 //!
-//! Multisig restore is DEFERRED (SPEC §11 — `restore-multisig-cosigner-scope`).
+//! Multisig restore (`--md1` + `--cosigner`, SPEC §11) shipped in v0.44.0
+//! (`restore-multisig-cosigner-scope`); see `run_multisig`.
 
 use std::io::{Read, Write};
 use std::str::FromStr;

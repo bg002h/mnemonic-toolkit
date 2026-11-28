@@ -129,6 +129,15 @@ The four sibling formats — **ms1**, **mk1**, **md1**, and the
 `mnemonic-toolkit` integration layer. The "star" is the visual mental
 model: toolkit at the centre, three card formats radiating out.
 
+## me / me-cli
+
+The SeedHammer II host CLI of repo `bg002h/mnemonic-engrave`. It owns
+no card format: it converts one public md1, mk1 or mt1 string to an
+NFC payload, checks a wallet backup's plates (`me bundle`), and packs
+payloads for the machine (`me sysw pack`, `me seal`). It refuses every
+ms1 on its NFC and bundle paths. See the
+[`me` reference](#me-me-cli-reference).
+
 ## md1 / md-cli / md-codec
 
 The descriptor card. Encodes a BIP-388-style wallet policy. CLI
@@ -150,6 +159,14 @@ secret-bearing (supplied via `--slot @i.phrase=`, `entropy=`,
 `wif=`, or `xprv=`). Watch-only slots have empty-string sentinels —
 see SPEC §5.8 emission rule (mode-uniform across single-sig,
 template multisig, descriptor multisig, multi-source, and hybrid).
+
+## mt1 / mt-cli / mt-codec
+
+The transaction card. Encodes an already-signed Bitcoin transaction as
+a set of codex32 strings, all required; the set is **bearer** (anyone
+holding it can broadcast the transaction). CLI binary `mt`; library
+crate `mt-codec`. Repo `bg002h/mnemonic-transaction`. See the
+[`mt` reference](#mt-mt-cli-reference).
 
 ## mnemonic
 

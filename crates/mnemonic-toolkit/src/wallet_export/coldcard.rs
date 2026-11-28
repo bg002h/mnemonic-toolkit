@@ -5,19 +5,18 @@
 //! - Multisig text (multisig templates; byte-identical bytes are accepted by
 //!   Jade per §6, so the §6 Jade emitter delegates here).
 //!
-//! Phase 1.2 lands the bip84 mainnet singlesig path only; bip44/bip49 land in
-//! Phase 1.3, multisig text lands in Phase 1.4. The single-flavor stubs that
-//! refuse with byte-exact pointers (§5.1 `bip86`, §5.2 `tr-multi-a`) land
-//! alongside their respective phases.
+//! `emit()` routes every multisig template to the multisig text emitter and
+//! the rest to the generic JSON emitter. Each refuses what Coldcard cannot
+//! ingest with a byte-exact pointer: `bip86` (§5.1) and the taproot multisig
+//! templates (§5.2).
 
 use super::{EmitInputs, MissingField, WalletFormatEmitter};
 use crate::error::ToolkitError;
 use serde::Serialize;
 
-/// SPEC v0.8 §5 — `WalletFormatEmitter` impl for `--format coldcard`.
-/// Phase 1.2: only the singlesig generic JSON skeleton (template bip44 /
-/// bip49 / bip84) is implemented; multisig + bip86 refusals + jade
-/// delegation arrive in later commits.
+/// SPEC v0.8 §5 — `WalletFormatEmitter` impl for `--format coldcard`:
+/// generic JSON for bip44 / bip49 / bip84, multisig text for the multisig
+/// templates (also used by the Jade emitter).
 pub(crate) struct ColdcardEmitter;
 
 impl WalletFormatEmitter for ColdcardEmitter {
@@ -127,14 +126,9 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
         CliTemplate::Bip44 => ("p2pkh", ColdcardSubSlot::Bip44),
         CliTemplate::Bip49 => ("p2wpkh-p2sh", ColdcardSubSlot::Bip49),
         CliTemplate::Bip84 => ("p2wpkh", ColdcardSubSlot::Bip84),
-        // Multisig templates: Phase 1.4 wires the §5.2 multisig text emitter.
-        // Until then, refuse cleanly so the v0.7 byte-exact contract holds.
-        _ => {
-            return Err(ToolkitError::BadInput(format!(
-                "--format coldcard does not yet support --template {} (Phase 1.4 wires Coldcard multisig text)",
-                template.human_name(),
-            )));
-        }
+        _ => unreachable!(
+            "multisig templates routed to multisig text via emit(); bip86 refused above"
+        ),
     };
 
     // Single-slot input — singlesig templates have exactly one resolved slot.

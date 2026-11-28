@@ -5,12 +5,9 @@
 //! replacement):
 //!
 //!   --blob <FILE|->                                             required UNLESS --bsms-round1 supplied
-//!   --format <bitcoin-core|bsms|coldcard|coldcard-multisig|electrum|jade|sparrow|specter>
-//!                                                               optional (sniff default).
-//!                                                               v0.28.0 Phase P0C pre-stubs the 6
-//!                                                               new formats (panic via
-//!                                                               `unimplemented!()` until per-parser
-//!                                                               P{N}C sub-phases wire real dispatch).
+//!   --format <bitcoin-core|bsms|coldcard|coldcard-multisig|descriptor|electrum|jade|sparrow|specter>
+//!                                                               optional (sniff default;
+//!                                                               `descriptor` is explicit-only).
 //!   --select-descriptor <N|active-receive|active-change|all>    default `all`
 //!   --ms1 <STRING>                                              repeatable (positional cosigner-index)
 //!   --slot @<N>.phrase=<STRING>                                 (existing slot infra)
@@ -134,9 +131,9 @@ pub struct ImportWalletArgs {
 
     /// Format override. If absent, the blob is auto-detected via sniff
     /// (SPEC §6). Supported values (alphabetical): `bitcoin-core`, `bsms`,
-    /// `coldcard`, `coldcard-multisig`, `electrum`, `jade`, `sparrow`,
-    /// `specter`. The 6 non-{bsms,bitcoin-core} formats are pre-stubbed at
-    /// v0.28.0 Phase P0C; per-parser dispatch ships in Phases P1C-P6C.
+    /// `coldcard`, `coldcard-multisig`, `descriptor`, `electrum`, `jade`,
+    /// `sparrow`, `specter`. `descriptor` is never sniffed: pass it
+    /// explicitly.
     #[arg(
         long = "format",
         value_name = "bitcoin-core|bsms|coldcard|coldcard-multisig|descriptor|electrum|jade|sparrow|specter",

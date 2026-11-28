@@ -51,12 +51,16 @@ On each cosigner's air-gapped machine, derive the xpub from that
 cosigner's own seed:
 
 ```sh
-mnemonic convert \
-  --from phrase="<this cosigner's phrase>" \
-  --to xpub --to fingerprint \
-  --template wsh-sortedmulti \
-  --network mainnet
+printf '%s' '<this cosigner phrase>' \
+  | mnemonic convert \
+      --from phrase=- \
+      --to xpub --to fingerprint \
+      --template wsh-sortedmulti \
+      --network mainnet
 ```
+
+The phrase is read from stdin (`--from phrase=-`); `mnemonic` refuses a
+phrase typed on the command line (exit 2).
 
 The cosigner writes down the xpub plus master fingerprint and
 hand-carries them (paper, QR, USB) to the coordinator. The phrase
@@ -77,10 +81,13 @@ mnemonic bundle \
   --network mainnet \
   --template wsh-sortedmulti \
   --threshold 2 \
-  --slot @0.xpub=<xpub-cosigner-0> \
-  --slot @1.xpub=<xpub-cosigner-1> \
-  --slot @2.xpub=<xpub-cosigner-2>
+  --slot @0.xpub=<xpub-cosigner-0> --slot @0.fingerprint=<fingerprint-cosigner-0> \
+  --slot @1.xpub=<xpub-cosigner-1> --slot @1.fingerprint=<fingerprint-cosigner-1> \
+  --slot @2.xpub=<xpub-cosigner-2> --slot @2.fingerprint=<fingerprint-cosigner-2>
 ```
+
+Pass each cosigner's fingerprint from Step 1: a slot without one
+records `00000000` as that cosigner's master fingerprint.
 
 The output is **4 cards**: 3 mk1 (one per cosigner's xpub + origin)
 and 1 md1 (the shared wallet policy `wsh(sortedmulti(2,@0,@1,@2))`).
@@ -98,10 +105,9 @@ sign, each cosigner derives their *own* ms1 on their own air-gapped
 machine:
 
 ```sh
-# On cosigner N's air-gapped machine
-mnemonic convert \
-  --from phrase="<cosigner N's phrase>" \
-  --to ms1
+# On cosigner N's air-gapped machine (phrase on stdin)
+printf '%s' '<cosigner N phrase>' \
+  | mnemonic convert --from phrase=- --to ms1
 ```
 
 Each cosigner stamps their own ms1 plate alongside copies of the

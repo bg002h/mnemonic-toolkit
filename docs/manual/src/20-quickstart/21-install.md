@@ -16,7 +16,7 @@ documents are the ones pinned in the toolkit's installer,
 
 **Do not install these CLIs from crates.io.** The copies there are
 several releases older than this manual (for example `md` 0.13 against
-the 0.20.4 documented here) and lack flags it describes.
+the 0.21.0 the installer pins) and lack flags it describes.
 
 ## Path A — the installer (prebuilt binaries)
 
@@ -118,11 +118,13 @@ git clone https://github.com/bg002h/mnemonic-key.git
 git clone https://github.com/bg002h/mnemonic-secret.git
 
 cd mnemonic-toolkit && cargo build --release --bin mnemonic
-cd ../descriptor-mnemonic && cargo build --release --bin md
+cd ../descriptor-mnemonic && cargo build --release -p md-cli --features cli-compiler
 cd ../mnemonic-secret && cargo build --release --bin ms
 cd ../mnemonic-key && cargo build --release --bin mk
 ```
 
+`--features cli-compiler` gives `md` its `compile` verb and `encode
+--from-policy`, as in the installer's build; without it both refuse.
 The release binaries land in each repo's `target/release/`. Either
 copy them onto your `PATH` (`cp target/release/mnemonic ~/.local/bin/`)
 or invoke them directly.
