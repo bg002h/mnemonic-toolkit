@@ -106,6 +106,7 @@ mt encode
 mt decode
 mt verify
 mt inspect
+mt repair
 
 # me (mnemonic-engrave) -- checked only when ME_BIN is set (tests/lint.sh).
 me bundle

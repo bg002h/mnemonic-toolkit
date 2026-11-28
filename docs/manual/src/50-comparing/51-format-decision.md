@@ -70,12 +70,12 @@ Each per-format tool (`ms`, `mk`, `md`, `mt`) centres on `encode` and `decode` f
 | `ms` | `encode`, `decode`, `hashlock`, `split`, `combine` | `repair` | `inspect`, `verify`, `derive` |
 | `mk` | `encode`, `decode` | `repair` | `inspect`, `verify`, `address`, `derive` |
 | `md` | `encode`, `decode`, `bytecode`, `compile`, `compose`, `shape-key`, `descriptor`, `decompose` | `repair` | `inspect`, `verify`, `address` |
-| [`mt`](#mt-mt-cli-reference) | `encode`, `decode` | none: `mt` has no `repair` | `inspect`, `verify` |
+| [`mt`](#mt-mt-cli-reference) | `encode`, `decode` | `repair`, once `mnemonic repair` accepts `mt1` | `inspect`, `verify` |
 | `mr` | `create`, `upgrade`, `verify`, `decode`, `member`, `address`, `current`, `units`, `export`, `root`, `child`, `lost-or-stolen`, `procedure` | `repair` | none |
 
 Each tool also keeps its own `vectors`, `gui-schema` and `gen-man` where it has them: they describe that tool, not a format.
 
-Today `mnemonic repair` repairs `ms1`, `mk1` and `md1` strings, except an `ms1` hashlock preimage plate (`ms10hash…`), which it does not read yet: repair that plate with `ms repair`. It does not accept `mr1` or `mt1` yet: repair an `mr1` string with `mr repair`, and `mt` corrects substituted characters in `mt1` strings while it reads them. `mnemonic repair` is planned to accept `mr1` and `mt1`, and `ms repair`, `mk repair`, `md repair` and `mr repair` are planned for removal.
+Today `mnemonic repair` repairs `ms1`, `mk1` and `md1` strings, except an `ms1` hashlock preimage plate (`ms10hash…`), which it does not read yet: repair that plate with `ms repair`. It does not accept `mr1` or `mt1` yet: repair an `mr1` string with `mr repair` and an `mt1` set with [`mt repair`](#mt-repair) (`mt decode`, `verify` and `inspect` also correct substituted characters while they read). `mnemonic repair` is planned to accept `mr1` and `mt1`, and `ms repair`, `mk repair`, `md repair`, `mr repair` and `mt repair` are planned for removal.
 
 Every other `mnemonic` verb (bundles, conversion, wallet import and export, BIP-85 and more; the `mnemonic` reference chapter lists them) is the toolkit's own. `mnemonic ms-shares` splits and combines the same codex32 shares as `ms split` and `ms combine`, through the same `ms-codec` engine; no move is planned for either.
 
