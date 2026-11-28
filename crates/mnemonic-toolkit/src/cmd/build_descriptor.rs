@@ -28,9 +28,9 @@ pub struct BuildDescriptorArgs {
     #[arg(long)]
     pub spec: Option<String>,
 
-    /// Target network (default mainnet). Used for the human-view first receive
-    /// address; the descriptor / bip388 / cost output is network-agnostic (the
-    /// xpubs carry the network).
+    /// Target network (default mainnet). Every key's version and origin
+    /// coin type is checked against it (a contradiction is refused, exit 8),
+    /// and the human-view first receive address is shown for it.
     #[arg(long, value_enum)]
     pub network: Option<CliNetwork>,
 
@@ -99,7 +99,7 @@ pub struct BuildDescriptorArgs {
 
     /// Print the lowered + gate-validated node-tree spec JSON instead of
     /// building (review it, edit it, feed it back via `--spec`). `--network`
-    /// is accepted and ignored. The gate still runs: an invalid preset emits
+    /// is accepted and checked against the keys. The gate still runs: an invalid preset emits
     /// diagnostics, never a spec.
     #[arg(long, requires = "archetype", conflicts_with_all = ["format", "json"])]
     pub emit_spec: bool,
@@ -111,6 +111,10 @@ pub struct BuildDescriptorArgs {
     /// descriptor. The emitted spec/document records NO allowance.
     #[arg(long, value_enum)]
     pub allow: Vec<CliAllow>,
+
+    /// Go on when an origin path's coin type (0h or 1h) disagrees with its key or the network; the output is for the run's network, every path is kept as written, and a warning is printed each time.
+    #[arg(long = "accept-coin-type-mismatch")]
+    pub accept_coin_type_mismatch: bool,
 }
 
 // `CliAllow`, `allow_set` and `emit_allow_notes` moved to
@@ -211,6 +215,16 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
         };
         emit_allow_notes(&args.allow, &validated.allowed_fired, stderr)?;
+        // The network rule (Spec A unit 7): once, after the gate, before any
+        // output, in every mode (--emit-spec included).
+        let typed: Vec<&str> = args
+            .key
+            .iter()
+            .chain(args.recovery_key.iter())
+            .chain(args.final_key.iter())
+            .map(String::as_str)
+            .collect();
+        network_check(&validated, &typed.join(" "), args, stderr)?;
         if args.emit_spec {
             // The gate has passed — the spec is safe to hand back for review.
             writeln!(
@@ -241,8 +255,27 @@ pub fn run<R: Read, W: Write, E: Write>(
         };
 
     emit_allow_notes(&args.allow, &validated.allowed_fired, stderr)?;
+    network_check(&validated, &spec_text, args, stderr)?;
     emit(&validated, args, stdout, stderr)?;
     Ok(0)
+}
+
+/// The network rule (Spec A unit 7): the policy's keys (`key @i` in BIP-388
+/// keys_info order) and their origin coin types against the run. `raw` is the
+/// text the keys were typed in (for `<pfx>` as typed).
+fn network_check<E: Write>(
+    vp: &ValidatedPolicy,
+    raw: &str,
+    args: &BuildDescriptorArgs,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let mut input = crate::network_rule::Input::new(
+        crate::network_rule::RunNet::from_opt(args.network),
+        crate::network_rule::descriptor_sources(raw, &vp.descriptor),
+        crate::network_rule::Thing::Descriptor,
+    );
+    input.accept_coin_type = args.accept_coin_type_mismatch;
+    crate::network_rule::enforce(&input, stderr)
 }
 
 fn read_spec<R: Read>(args: &BuildDescriptorArgs, stdin: &mut R) -> Result<String, ToolkitError> {
@@ -389,35 +422,6 @@ fn emit<W: Write, E: Write>(
     Ok(())
 }
 
-/// cycle-5 S-NET (L1): infer the descriptor's display `NetworkKind` from its
-/// own xpub version bytes. Walks every key: `XPub`/`MultiXPub` contribute their
-/// `xkey.network`; `Single` (raw pubkey leaf — e.g. a taproot NUMS internal
-/// key) encodes NO network and contributes nothing. Returns `None` when no key
-/// encodes a network (an all-`Single` descriptor) — there is then nothing to
-/// disagree with, so the L1 WARN stays silent.
-fn infer_descriptor_network_kind(
-    descriptor: &miniscript::Descriptor<miniscript::DescriptorPublicKey>,
-) -> Option<bitcoin::NetworkKind> {
-    use miniscript::DescriptorPublicKey;
-    let mut inferred: Option<bitcoin::NetworkKind> = None;
-    for pk in descriptor.iter_pk() {
-        let kind = match &pk {
-            DescriptorPublicKey::XPub(x) => Some(x.xkey.network),
-            DescriptorPublicKey::MultiXPub(x) => Some(x.xkey.network),
-            DescriptorPublicKey::Single(_) => None,
-        };
-        if let Some(k) = kind {
-            // All xpub keys share a family by construction; a disagreement
-            // would be a pre-existing malformed descriptor (out of L1 scope —
-            // first network-bearing key wins for the display preview).
-            if inferred.is_none() {
-                inferred = Some(k);
-            }
-        }
-    }
-    inferred
-}
-
 fn emit_human<W: Write, E: Write>(
     vp: &ValidatedPolicy,
     args: &BuildDescriptorArgs,
@@ -425,40 +429,9 @@ fn emit_human<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<(), ToolkitError> {
-    // cycle-5 S-NET (L1) — WARN/DIAGNOSE, NOT reject. The canonical / bip388
-    // deliverables are network-agnostic and byte-correct; only the optional
-    // human first-address preview's HRP/label depends on `network`. So we
-    // infer the display network from the keys' own version bytes when
-    // `--network` is omitted (preview is then right by default), and emit a
-    // stderr WARN (exit 0, still render) when an explicit `--network`
-    // disagrees with the keys.
-    let inferred = infer_descriptor_network_kind(&vp.descriptor);
-    let network = match (args.network, inferred) {
-        // `--network` supplied: honor it (the user explicitly chose this
-        // preview network); WARN if the keys assert a different family.
-        (Some(net), Some(keys_kind)) => {
-            if net.network_kind() != keys_kind {
-                writeln!(
-                    stderr,
-                    "warning: build-descriptor: --network {} disagrees with descriptor keys ({}); \
-                     preview shown for --network (the deliverable descriptor is network-agnostic)",
-                    net.human_name(),
-                    crate::network::network_kind_name(keys_kind),
-                )
-                .map_err(ToolkitError::Io)?;
-            }
-            net
-        }
-        (Some(net), None) => net,
-        // `--network` omitted: infer from keys so the preview HRP is right by
-        // default; fall back to the historical Mainnet default for an
-        // all-`Single` (network-less) descriptor.
-        (None, Some(keys_kind)) => match keys_kind {
-            bitcoin::NetworkKind::Main => CliNetwork::Mainnet,
-            bitcoin::NetworkKind::Test => CliNetwork::Testnet,
-        },
-        (None, None) => CliNetwork::Mainnet,
-    };
+    // The network rule has checked the keys against the run (Spec A unit 7,
+    // erratum E1): the preview network is the run network.
+    let network = args.network.unwrap_or(CliNetwork::Mainnet);
     writeln!(stdout, "descriptor:\n{canonical}\n").map_err(ToolkitError::Io)?;
 
     // First receive address (best-effort; never fails the emit).

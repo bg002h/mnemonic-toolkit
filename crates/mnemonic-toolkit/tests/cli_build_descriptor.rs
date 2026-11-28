@@ -1551,16 +1551,19 @@ fn preset_success_json_and_network_compose() {
     assert!(v["cost"].is_object());
     assert_eq!(v["diagnostics"], serde_json::json!([]));
 
+    // The network rule (Spec A unit 7, R7.2): mainnet keys on --network
+    // testnet are refused, exit 8, nothing on stdout (was a tb1q preview).
     let out = bin()
         .args(["build-descriptor"])
         .args(a.preset_args)
         .args(["--network", "testnet"])
-        .assert()
-        .success();
-    let human = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert!(
-        human.contains("tb1q"),
-        "testnet first receive address expected:\n{human}"
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(8));
+    assert!(out.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr).lines().collect::<Vec<_>>(),
+        ["error: network mismatch: keys @0, @1, @2 and @3 are mainnet keys (xpub), but --network is testnet. Nothing was written. For a mainnet wallet, rerun with --network mainnet. For a testnet wallet, export the key again with the signer set to a test network."]
     );
 }
 

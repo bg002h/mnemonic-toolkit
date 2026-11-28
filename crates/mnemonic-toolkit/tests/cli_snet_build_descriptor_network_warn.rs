@@ -1,4 +1,6 @@
-//! cycle-5 S-NET (L1): `build-descriptor`'s human first-address preview is the
+//! cycle-5 S-NET (L1), as reversed by erratum E1 (SPEC_network_rule unit 7):
+//! the two pins that warned or inferred now refuse (exit 8). Original header:
+//! `build-descriptor`'s human first-address preview was the
 //! ONLY network-disposition that WARNS instead of rejecting — the canonical /
 //! bip388 deliverables are network-agnostic and byte-correct; only the optional
 //! preview's HRP/label depends on `--network`. New behavior:
@@ -41,40 +43,38 @@ fn build(k1: &str, k2: &str, network: Option<&str>) -> std::process::Output {
         .expect("spawn")
 }
 
+/// Erratum E1 (Spec A unit 7) reverses the two L1 pins below: a key of
+/// another network than the run is refused (exit 8, TX-H1), and no `--network`
+/// means mainnet (no inference from the keys).
 #[test]
 fn l1_tpub_with_network_mainnet_warns_not_rejects() {
-    // RED: the deliverable is network-agnostic, so this must WARN (stderr) and
-    // EXIT 0 — never reject.
     let out = build(TPUB_K1, TPUB_K2, Some("mainnet"));
     assert_eq!(
         out.status.code(),
-        Some(0),
-        "L1 must WARN not reject; stderr: {}",
+        Some(8),
+        "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("warning")
-            && stderr.contains("disagrees with descriptor keys")
-            && stderr.contains("testnet"),
-        "expected the network-disagreement WARN; got: {stderr}"
+    assert!(out.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr).lines().collect::<Vec<_>>(),
+        ["error: network mismatch: keys @0 and @1 are test-network keys (tpub), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet."]
     );
 }
 
 #[test]
 fn l1_tpub_network_omitted_infers_testnet_preview() {
-    // No `--network`: the preview HRP must be inferred from the tpub keys
-    // (tb1…), NOT the historical Mainnet default — and NO warning.
     let out = build(TPUB_K1, TPUB_K2, None);
-    assert_eq!(out.status.code(), Some(0));
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains("Testnet") && stdout.contains("tb1"),
-        "expected inferred-testnet preview (tb1…); stdout: {stdout}"
+    assert_eq!(
+        out.status.code(),
+        Some(8),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
     );
-    assert!(
-        !String::from_utf8_lossy(&out.stderr).contains("warning"),
-        "no warning when --network is omitted"
+    assert!(out.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr).lines().collect::<Vec<_>>(),
+        ["error: network mismatch: keys @0 and @1 are test-network keys (tpub), but this run is on mainnet (no --network given). Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet."]
     );
 }
 
