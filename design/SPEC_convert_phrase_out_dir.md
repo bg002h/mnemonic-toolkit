@@ -1,6 +1,6 @@
 # SPEC — `mnemonic convert --phrase-out-dir`: save seed words to an owner-only file
 
-Status: DRAFT; Brian's rulings of 2026-11-28 folded (§3, §6); R0 round 1 (1C/8I/12m) R1 (0C/3I/10m) and R2 (0C/1I/4m) folded (`design/agent-reports/phrase-out-dir-spec-R{0,1,2}.md`). Not implemented.
+Status: DRAFT; Brian's rulings of 2026-11-28 folded (§3, §6); R0 round 1 (1C/8I/12m) R1 (0C/3I/10m) and R2 (0C/1I/4m) folded; R3 0C/0I (GREEN) (`design/agent-reports/phrase-out-dir-spec-R{0,1,2,3}.md`). Not implemented.
 Baseline: mnemonic-toolkit `master` at `d72a18b`.
 
 ## 1. Why
@@ -302,7 +302,7 @@ engraving as the durable form. Encryption (`age`) is out of scope here.
 ## 7. Lockstep (owed by the build PR)
 
 - Toolkit manual `docs/manual/src/40-cli-reference/41-mnemonic.md` (`convert`
-  flag table from :1120; both flags; the JSON v1 extension; the leftover-temp
+  flag table from :1120; both flags; the JSON `schema_version` "2" under the flag; the leftover-temp
   note; the ms-cli Chinese spelling), and `make -C docs/manual lint`.
 - GUI manual `docs/manual-gui/src/40-mnemonic/44-convert.md` (flag index :33-48).
 - mnemonic-gui `src/schema/mnemonic.rs` `CONVERT_FLAGS` gains both flags;
@@ -351,7 +351,8 @@ engraving as the durable form. Encryption (`age`) is out of scope here.
 - `--to phrase,phrase` → one file; `--to phrase,ms1 --group-size 5` → file
   ungrouped, card grouped;
 - stdout carries no word of the phrase; `--json` carries `path` and
-  `already_saved`, no `value`, `schema_version` `"1"`;
+  `already_saved`, no `value`, `schema_version` `"2"`; without the flag the envelope is
+  byte-identical, `schema_version` `"1"`;
 - ms1 auto-repair exit 5 → no file;
 - Windows warning: the platform decision is a pure function tested on Linux
   (CI is Ubuntu-only), the real Windows run is a manual row.
