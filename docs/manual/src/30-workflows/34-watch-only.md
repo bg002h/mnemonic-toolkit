@@ -37,11 +37,12 @@ machine, then build the bundle on a watch-only host — keeps the
 seed off the bundle-building host:
 
 ```sh
-# Step 1 (on the air-gapped seed-holder)
-mnemonic convert \
-  --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-  --to xpub \
-  --template bip84
+# Step 1 (on the air-gapped seed-holder; the phrase is read from stdin)
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic convert \
+      --from phrase=- \
+      --to xpub \
+      --template bip84
 
 # Step 2 (on the internet-connected host)
 mnemonic bundle \

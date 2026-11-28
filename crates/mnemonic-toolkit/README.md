@@ -36,22 +36,28 @@ The **[end-user manual](https://github.com/bg002h/mnemonic-toolkit/tree/master/d
 <details><summary>Quickstart (bundle + verify-bundle)</summary>
 
 ```bash
+# Secret material (phrase, ms1, xprv, WIF, passphrase, ...) is never typed on
+# the command line: mnemonic refuses it there (exit 2). Pipe one value on stdin
+# (`=-`) or name an environment variable (`@env:VAR`).
+PHRASE='abandon abandon ... about'
+
 # Full mode (single-sig): phrase → 3-card bundle.
-mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --template bip84
+printf '%s' "$PHRASE" | mnemonic bundle --network mainnet --template bip84 --slot @0.phrase=-
 
 # Watch-only (single-sig): xpub + master fingerprint → 2-card bundle (mk1 + md1).
-mnemonic bundle --xpub xpub6... --master-fingerprint 5436d724 --network mainnet --template bip84
+mnemonic bundle --network mainnet --template bip84 \
+    --slot @0.xpub=xpub6... --slot @0.fingerprint=73c5da0a
 
 # Multisig 2-of-3 (watch-only with distinct cosigners — the production shape).
 mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
-    --cosigner xpub6A...:fingerprint1:m/87h/0h/0h \
-    --cosigner xpub6B...:fingerprint2:m/87h/0h/0h \
-    --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
+    --slot @0.xpub=xpub6A... --slot @0.fingerprint=73c5da0a --slot "@0.path=m/87h/0h/0h" \
+    --slot @1.xpub=xpub6B... --slot @1.fingerprint=b8688df1 --slot "@1.path=m/87h/0h/0h" \
+    --slot @2.xpub=xpub6C... --slot @2.fingerprint=28645006 --slot "@2.path=m/87h/0h/0h"
 
 # Round-trip verification: confirm the engraved bundle decodes against the original phrase.
-MS1=ms1... mnemonic verify-bundle --phrase "abandon abandon ... art" \
-    --network mainnet --template bip84 \
-    --ms1 @env:MS1 --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
+printf '%s' "$PHRASE" | MS1=ms1... mnemonic verify-bundle \
+    --network mainnet --template bip84 --slot @0.phrase=- \
+    --ms1 @env:MS1 --mk1 mk1q... --mk1 mk1q... --md1 md1f... --md1 md1f... --md1 md1f...
 ```
 
 `--json` is available on `bundle` / `verify-bundle` for tooling.
@@ -60,50 +66,59 @@ MS1=ms1... mnemonic verify-bundle --phrase "abandon abandon ... art" \
 ## Templates and networks
 
 ```bash
+# Secret material (phrase, ms1, xprv, WIF, passphrase, ...) is never typed on
+# the command line: mnemonic refuses it there (exit 2). Pipe one value on stdin
+# (`=-`) or name an environment variable (`@env:VAR`).
+PHRASE='abandon abandon ... about'
+
 # Full mode (single-sig): phrase → 3-card bundle.
-mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --template bip84
+printf '%s' "$PHRASE" | mnemonic bundle --network mainnet --template bip84 --slot @0.phrase=-
 
 # Watch-only mode (single-sig): xpub + master fingerprint → 2-card bundle (mk1 + md1; ms1 is empty-string sentinel).
-mnemonic bundle --xpub xpub6... --master-fingerprint 5436d724 --network mainnet --template bip84
+mnemonic bundle --network mainnet --template bip84 \
+    --slot @0.xpub=xpub6... --slot @0.fingerprint=73c5da0a
 
 # Multisig 2-of-3 (watch-only with distinct cosigners — the production shape).
 mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
-    --cosigner xpub6A...:fingerprint1:m/87h/0h/0h \
-    --cosigner xpub6B...:fingerprint2:m/87h/0h/0h \
-    --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
+    --slot @0.xpub=xpub6A... --slot @0.fingerprint=73c5da0a --slot "@0.path=m/87h/0h/0h" \
+    --slot @1.xpub=xpub6B... --slot @1.fingerprint=b8688df1 --slot "@1.path=m/87h/0h/0h" \
+    --slot @2.xpub=xpub6C... --slot @2.fingerprint=28645006 --slot "@2.path=m/87h/0h/0h"
 
 # Multisig 2-of-3 (full mode, multi-source — N distinct seeds via --slot, v0.4+).
+# stdin carries one value, so each seed comes from its own environment variable.
+export SEED_0='abandon abandon ... about' SEED_1='legal winner thank ... yellow' SEED_2='letter advice cage ... above'
 mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
-    --slot "@0.phrase=abandon abandon ... art" \
-    --slot "@1.phrase=legal winner thank ... vote" \
-    --slot "@2.phrase=letter advice cage ... above"
+    --slot @0.phrase=@env:SEED_0 \
+    --slot @1.phrase=@env:SEED_1 \
+    --slot @2.phrase=@env:SEED_2
 
 # Hybrid 2-of-3 (own seed @0 + watch-only cosigners @1, @2 via --slot).
-mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
-    --slot "@0.phrase=abandon abandon ... art" \
+printf '%s' "$PHRASE" | mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
+    --slot @0.phrase=- \
     --slot "@1.xpub=xpub6B..." --slot "@1.fingerprint=cafef00d" --slot "@1.path=87'/0'/0'" \
     --slot "@2.xpub=xpub6C..." --slot "@2.fingerprint=cafe1234" --slot "@2.path=87'/0'/0'"
 
 # Privacy-preserving: omit master fingerprints from mk1 cards.
 mnemonic bundle --privacy-preserving \
     --network mainnet --template wsh-sortedmulti --threshold 2 \
-    --cosigner xpub6A...:fingerprint1:m/87h/0h/0h \
-    --cosigner xpub6B...:fingerprint2:m/87h/0h/0h \
-    --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
+    --slot @0.xpub=xpub6A... --slot @0.fingerprint=73c5da0a --slot "@0.path=m/87h/0h/0h" \
+    --slot @1.xpub=xpub6B... --slot @1.fingerprint=b8688df1 --slot "@1.path=m/87h/0h/0h" \
+    --slot @2.xpub=xpub6C... --slot @2.fingerprint=28645006 --slot "@2.path=m/87h/0h/0h"
 
 # User-supplied BIP-388 descriptor (full or watch-only auto-detected).
-mnemonic bundle --descriptor "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))" \
-    --network mainnet --phrase "abandon abandon ... art" \
-    --cosigner xpub6B...:fingerprint2:m/87h/0h/0h \
-    --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
+printf '%s' "$PHRASE" | mnemonic bundle \
+    --descriptor "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))" \
+    --network mainnet --slot @0.phrase=- \
+    --slot @1.xpub=xpub6B... --slot @1.fingerprint=b8688df1 --slot "@1.path=m/87h/0h/0h" \
+    --slot @2.xpub=xpub6C... --slot @2.fingerprint=28645006 --slot "@2.path=m/87h/0h/0h"
 
 # --self-check: synthesize-then-verify before engraving.
-mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --template bip84 --self-check
+printf '%s' "$PHRASE" | mnemonic bundle --network mainnet --template bip84 --slot @0.phrase=- --self-check
 
 # Round-trip verification: confirm the engraved bundle decodes against the original phrase.
-MS1=ms1... mnemonic verify-bundle --phrase "abandon abandon ... art" \
-    --network mainnet --template bip84 \
-    --ms1 @env:MS1 --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
+printf '%s' "$PHRASE" | MS1=ms1... mnemonic verify-bundle \
+    --network mainnet --template bip84 --slot @0.phrase=- \
+    --ms1 @env:MS1 --mk1 mk1q... --mk1 mk1q... --md1 md1f... --md1 md1f... --md1 md1f...
 ```
 
 `--json` is available on `bundle` / `verify-bundle` for tooling. Schema version `"4"` is the v0.4 wire envelope; `ms1` is a length-N array (empty-string sentinel for watch-only slots).
@@ -111,34 +126,41 @@ MS1=ms1... mnemonic verify-bundle --phrase "abandon abandon ... art" \
 ### `mnemonic convert` (v0.6+) — single-format conversions
 
 ```bash
+# Secret inputs come on stdin (`=-`) or from the environment (`@env:VAR`);
+# on the command line they are refused (exit 2).
+PHRASE='abandon abandon ... about'
+
 # BIP-39 phrase ↔ entropy ↔ xpub.
-mnemonic convert --from "phrase=abandon abandon ... art" --to entropy
-mnemonic convert --from "entropy=00000000000000000000000000000000" --to phrase
-mnemonic convert --from "phrase=abandon abandon ... art" --to xpub --template bip84 --network mainnet
+printf '%s' "$PHRASE" | mnemonic convert --from phrase=- --to entropy
+printf '%s' 00000000000000000000000000000000 | mnemonic convert --from entropy=- --to phrase
+printf '%s' "$PHRASE" | mnemonic convert --from phrase=- --to xpub --template bip84 --network mainnet
 
 # BIP-38 encrypted WIF (v0.7).
-mnemonic convert --from "wif=L4..." --to bip38 --passphrase "TestingOneTwoThree"
-mnemonic convert --from "bip38=6PYN..." --to wif --passphrase "TestingOneTwoThree"
+export WIF='L4...' BIP38='6PYN...' PASS='TestingOneTwoThree'
+mnemonic convert --from wif=@env:WIF --to bip38 --passphrase @env:PASS
+mnemonic convert --from bip38=@env:BIP38 --to wif --passphrase @env:PASS
 
 # v0.8 BREAKING — composite (phrase|entropy, bip38) splits the passphrase:
 #   --passphrase  drives BIP-39 PBKDF2 (mnemonic extension);
 #   --bip38-passphrase  drives BIP-38 Scrypt independently.
 # v0.7 dual-purpose semantics: `--passphrase X` reused for both legs.
 # v0.8: `--passphrase X --bip38-passphrase X` to preserve v0.7 behavior.
-mnemonic convert --from "phrase=abandon abandon ... art" --to bip38 \
-    --path "m/84'/0'/0'/0/0" --passphrase "extension" --bip38-passphrase "scrypt-key"
+export EXT='extension' KEY='scrypt-key'
+printf '%s' "$PHRASE" | mnemonic convert --from phrase=- --to bip38 \
+    --path "m/84'/0'/0'/0/0" --passphrase @env:EXT --bip38-passphrase @env:KEY
 
 # Raw-stdin passphrase (preserves NULL bytes; BIP-38 V3 spec vector).
+export BIP38='6PRW...'
 printf '\xcf\x93\x00\xf0\x90\x90\x80\xf0\x9f\x92\xa9' | \
-    mnemonic convert --from "bip38=6PRW..." --to wif --passphrase-stdin
+    mnemonic convert --from bip38=@env:BIP38 --to wif --passphrase-stdin
 
 # Electrum native seed (v0.7; v0.8 adds --electrum-language for non-English).
-mnemonic convert --from "electrum-phrase=cram swing cover prefer ... able" --to entropy
-mnemonic convert --from "electrum-phrase=almíbar tibio superar ... odisea" --to entropy \
+printf '%s' 'cram swing cover prefer ... able' | mnemonic convert --from electrum-phrase=- --to entropy
+printf '%s' 'almíbar tibio superar ... odisea' | mnemonic convert --from electrum-phrase=- --to entropy \
     --electrum-language spanish
 
 # Casascius mini-key (v0.7).
-mnemonic convert --from "minikey=SzavMBLoXU6kDrqtUVmffv" --to wif
+printf '%s' SzavMBLoXU6kDrqtUVmffv | mnemonic convert --from minikey=- --to wif
 ```
 
 ### `mnemonic export-wallet` (v0.7) — watch-only wallet artifacts
@@ -167,20 +189,24 @@ mnemonic export-wallet --template tr-multi-a --threshold 2 --network mainnet \
 ### `mnemonic derive-child` (v0.7) — BIP-85 deterministic children
 
 ```bash
+# The master secret is read from stdin (`--from xprv=-` / `--from phrase=-`).
+XPRV='xprv9s21...'
+
 # BIP-85 BIP-39 children.
-mnemonic derive-child --from "xprv=xprv9s21..." \
+printf '%s' "$XPRV" | mnemonic derive-child --from xprv=- \
     --application bip39 --length 12 --index 0
 
-# v0.8: phrase as master + non-English wordlist.
-mnemonic derive-child --from "phrase=girl mad pet ... nose" \
-    --application bip39 --length 12 --index 0 --language japanese
+# v0.8: phrase as master (--language names the wordlist of both the
+# master phrase and the child; default english).
+printf '%s' 'girl mad pet ... nose' | mnemonic derive-child --from phrase=- \
+    --application bip39 --length 12 --index 0
 
 # v0.8: testnet emission (hd-seed / xprv).
-mnemonic derive-child --from "xprv=xprv9s21..." \
+printf '%s' "$XPRV" | mnemonic derive-child --from xprv=- \
     --application hd-seed --length 0 --index 0 --network testnet
 
 # v0.8: BIP-85 DICE (deterministic dice rolls per BIP-85 v1.3.0 §"DICE").
-mnemonic derive-child --from "xprv=xprv9s21..." \
+printf '%s' "$XPRV" | mnemonic derive-child --from xprv=- \
     --application dice --length 10 --index 0 --dice-sides 6
 # → 1,0,0,2,0,1,5,5,2,4
 ```
@@ -196,7 +222,7 @@ mnemonic derive-child --from "xprv=xprv9s21..." \
 
 ## Engraving caveats
 
-- **BIP-388 distinct-key conformance** (v0.4): the toolkit hard-rejects any bundle whose slots resolve to identical `(xpub, derivation_path)` tuples. This catches the v0.2 self-multisig pattern (single seed used as N cosigners) at both `bundle` (exit 2) and `verify-bundle` (exit 4). Use `--cosigner` triples for watch-only multisig or `--slot @N.phrase=` per cosigner for multi-source full multisig.
+- **BIP-388 distinct-key conformance** (v0.4): the toolkit hard-rejects any bundle whose slots resolve to identical `(xpub, derivation_path)` tuples. This catches the v0.2 self-multisig pattern (single seed used as N cosigners) at both `bundle` (exit 2) and `verify-bundle` (exit 4). Use `--slot @N.xpub=` / `@N.fingerprint=` / `@N.path=` per cosigner for watch-only multisig, or `--slot @N.phrase=@env:VAR` per cosigner for multi-source full multisig.
 - `ms1` v0.1 does NOT carry the BIP-39 wordlist language on the wire. Users with non-English wallets MUST record the wordlist language alongside the engraved card. The toolkit's `bundle` subcommand prints a default-card with that metadata to stderr (suppress with `--no-engraving-card`).
 - `mk1` is single-string; the 20-bit `chunk_set_id` is derived deterministically from the policy_id_stub for byte-reproducible output. K-of-N share encoding is planned for the mk-codec v0.2 cycle.
 - `md1` emits wallet-policy mode descriptors only.

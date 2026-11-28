@@ -1,5 +1,11 @@
 # mk-codec Rust API
 
+> **Version note.** This chapter documents `mk-codec` **v0.2.2**. The current
+> release is newer: the toolkit resolves mk-codec 0.4.1 (its `Cargo.lock`),
+> and the `mnemonic-key` repository is at 0.6.0. The API has changed since
+> v0.2.2; check the crate's own docs (`cargo doc -p mk-codec`) for the current
+> surface, and pin the version you use rather than the `"0.2"` shown below.
+
 This chapter is the reference for the `mk-codec`\index{mk-codec} crate's public surface at v0.2.2\index{mk-codec v0.2.2} (HEAD `e8782fd` in `bg002h/mnemonic-key`). It enumerates every public module, function, type, constant, and error variant. The wire format these APIs encode/decode is §II.2; this chapter is the library API only — the `mk-cli` binary lives in a sibling crate and its surface is covered in the end-user manual, not Part V. For the normative wire spec, see `mnemonic-key/design/SPEC_mk_v0_1.md` and the in-tree BIP draft at `mnemonic-key/bip/bip-mnemonic-key.mediawiki`.
 
 ## V.2.1 Crate purpose

@@ -69,14 +69,22 @@ side; this flag does not exist on `bundle` or `verify-bundle`. See
 
 ## Step 1 — synthesise (NUMS internal key)
 
+As in the [2-of-3 flow](#multi-source-2-of-3-multisig), each cosigner's
+phrase comes from an environment variable (`--slot @N.phrase=@env:VAR`):
+a phrase typed on the command line is refused (exit 2).
+
 ```sh
+export SEED_0='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+export SEED_1='legal winner thank year wave sausage worth useful legal winner thank yellow'
+export SEED_2='letter advice cage absurd amount doctor acoustic avoid letter advice cage above'
+
 mnemonic bundle \
   --network mainnet \
   --template tr-sortedmulti-a \
   --threshold 2 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-  --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
-  --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
+  --slot @0.phrase=@env:SEED_0 \
+  --slot @1.phrase=@env:SEED_1 \
+  --slot @2.phrase=@env:SEED_2 \
   --self-check
 ```
 
@@ -90,9 +98,9 @@ the script path; the NUMS point cannot sign.
 mnemonic bundle \
   --network mainnet \
   --descriptor 'tr(@2,sortedmulti_a(2,@0,@1))' \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-  --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
-  --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
+  --slot @0.phrase=@env:SEED_0 \
+  --slot @1.phrase=@env:SEED_1 \
+  --slot @2.phrase=@env:SEED_2 \
   --self-check
 ```
 
@@ -124,14 +132,15 @@ D" — supply a user-defined BIP-388 wallet policy directly:
 mnemonic bundle \
   --network mainnet \
   --descriptor 'tr(@4,{multi_a(2,@0,@1,@2),and_v(v:older(52596),pk(@3))})' \
-  --slot @0.phrase=<…> \
-  --slot @1.phrase=<…> \
-  --slot @2.phrase=<…> \
-  --slot @3.phrase=<…> \
-  --slot @4.phrase=<…>
+  --slot @0.phrase=@env:SEED_0 \
+  --slot @1.phrase=@env:SEED_1 \
+  --slot @2.phrase=@env:SEED_2 \
+  --slot @3.phrase=@env:SEED_3 \
+  --slot @4.phrase=@env:SEED_4
 ```
 
-Two script-path leaves (cooperative-multisig + emergency-timelock)
+(`SEED_3` and `SEED_4` are exported like the first three.) Two
+script-path leaves (cooperative-multisig + emergency-timelock)
 and a key-path internal key. The toolkit emits the wallet policy
 bound to the five xpubs in the appropriate slots.
 

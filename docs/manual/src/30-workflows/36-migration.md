@@ -53,25 +53,30 @@ If your wallet exports a BIP-388 wallet policy or a descriptor
 string directly, prefer that:
 
 ```sh
-mnemonic bundle \
-  --network mainnet \
-  --descriptor 'wpkh([73c5da0a/84h/0h/0h]xpub.../<0;1>/*)' \
-  --slot @0.phrase="<your phrase>"
+printf '%s' '<your phrase>' \
+  | mnemonic bundle \
+      --network mainnet \
+      --descriptor 'wpkh([73c5da0a/84h/0h/0h]xpub.../<0;1>/*)' \
+      --slot @0.phrase=-
 ```
 
-The toolkit accepts any BIP-388-conformant descriptor.
+The toolkit accepts any BIP-388-conformant descriptor. Every command in
+this chapter reads the phrase from stdin (`=-`): a phrase typed on the
+command line is refused (exit 2). See
+[Secret material on argv is REFUSED](#argv-refusal).
 
 ## Step 2 — build the bundle
 
 Once the template is known:
 
 ```sh
-mnemonic bundle \
-  --network mainnet \
-  --template <template> \
-  --account <account-index> \
-  --slot @0.phrase="<your phrase>" \
-  --self-check
+printf '%s' '<your phrase>' \
+  | mnemonic bundle \
+      --network mainnet \
+      --template <template> \
+      --account <account-index> \
+      --slot @0.phrase=- \
+      --self-check
 ```
 
 The default `--account 0` matches most wallets. Hardware wallets
@@ -86,11 +91,12 @@ bundle would diverge from your existing wallet — fund-loss risk.
 
 ```sh
 # Extract the xpub the bundle would emit
-mnemonic convert \
-  --from phrase="<your phrase>" \
-  --to xpub \
-  --template <template> \
-  --account <account-index>
+printf '%s' '<your phrase>' \
+  | mnemonic convert \
+      --from phrase=- \
+      --to xpub \
+      --template <template> \
+      --account <account-index>
 
 # Compare against your wallet's "Show xpub" dialog
 ```
@@ -120,16 +126,19 @@ devices:
      --network mainnet \
      --template wsh-sortedmulti \
      --threshold K \
-     --slot @0.xpub=<xpub from cosigner 0> \
-     --slot @1.xpub=<xpub from cosigner 1> \
-     --slot @2.xpub=<xpub from cosigner 2>
+     --slot @0.xpub=<xpub from cosigner 0> --slot @0.fingerprint=<fingerprint of cosigner 0> \
+     --slot @1.xpub=<xpub from cosigner 1> --slot @1.fingerprint=<fingerprint of cosigner 1> \
+     --slot @2.xpub=<xpub from cosigner 2> --slot @2.fingerprint=<fingerprint of cosigner 2>
    ```
+
+   Hardware wallets export each cosigner's master fingerprint with the
+   xpub; without `@N.fingerprint` the cards record `00000000`.
 
 3. Each cosigner additionally produces their own ms1 from their
    own seed on their own air-gapped device:
 
    ```sh
-   mnemonic convert --from phrase="<their phrase>" --to ms1
+   printf '%s' '<their phrase>' | mnemonic convert --from phrase=- --to ms1
    ```
 
 4. Verify the resulting bundle's xpub set matches the existing

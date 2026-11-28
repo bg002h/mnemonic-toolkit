@@ -64,14 +64,24 @@ For taproot multisig, see [Taproot multisig](#taproot-multisig).
 
 ## Step 2 — synthesise the bundle
 
+The three phrases go in environment variables, and each `--slot` names
+its variable with `@env:`. `mnemonic` refuses a phrase typed on the
+command line (exit 2), where other processes could read it; stdin
+(`--slot @N.phrase=-`) carries only one phrase, so a multi-seed bundle
+uses `@env:`. See [Secret material on argv is REFUSED](#argv-refusal).
+
 ```sh
+export SEED_0='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+export SEED_1='legal winner thank year wave sausage worth useful legal winner thank yellow'
+export SEED_2='letter advice cage absurd amount doctor acoustic avoid letter advice cage above'
+
 mnemonic bundle \
   --network mainnet \
   --template wsh-sortedmulti \
   --threshold 2 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-  --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
-  --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
+  --slot @0.phrase=@env:SEED_0 \
+  --slot @1.phrase=@env:SEED_1 \
+  --slot @2.phrase=@env:SEED_2 \
   --self-check \
   > bundle.txt
 ```
@@ -82,7 +92,7 @@ The interesting flags vs. single-sig:
   emitted descriptor will be `wsh(sortedmulti(2,@0,@1,@2))`.
 - **`--threshold 2`** — the K of K-of-N. Required for multisig
   templates; ignored for single-sig.
-- **`--slot @N.phrase=…`** repeated three times — one slot per
+- **`--slot @N.phrase=@env:SEED_N`** repeated three times — one slot per
   cosigner, indexed `@0` through `@2`. The slot index becomes the
   cosigner index in the BIP-388 wallet policy.
 - **`--multisig-path-family bip87`** is the default and stays. The
@@ -96,22 +106,32 @@ stderr stream; the stdout strings are grouped per card type.
 
 ## Step 3 — verify before stamping
 
+The three ms1 cards are secret too, so they also come from the
+environment (`--ms1 @env:VAR`, once per card):
+
 ```sh
+export MS1_0='<ms1-cosigner-0>'
+export MS1_1='<ms1-cosigner-1>'
+export MS1_2='<ms1-cosigner-2>'
+
 mnemonic verify-bundle \
   --network mainnet \
   --template wsh-sortedmulti \
   --threshold 2 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-  --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
-  --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
-  --ms1 <ms1-cosigner-0> \
-  --ms1 <ms1-cosigner-1> \
-  --ms1 <ms1-cosigner-2> \
+  --slot @0.phrase=@env:SEED_0 \
+  --slot @1.phrase=@env:SEED_1 \
+  --slot @2.phrase=@env:SEED_2 \
+  --ms1 @env:MS1_0 \
+  --ms1 @env:MS1_1 \
+  --ms1 @env:MS1_2 \
   --mk1 <mk1-cosigner-0-line-1> --mk1 <mk1-cosigner-0-line-2> \
   --mk1 <mk1-cosigner-1-line-1> --mk1 <mk1-cosigner-1-line-2> \
   --mk1 <mk1-cosigner-2-line-1> --mk1 <mk1-cosigner-2-line-2> \
-  --md1 <md1-line-1> --md1 <md1-line-2> --md1 <md1-line-3> --md1 <md1-line-4>
+  --md1 <md1-line-1> --md1 <md1-line-2> --md1 <md1-line-3> \
+  --md1 <md1-line-4> --md1 <md1-line-5> --md1 <md1-line-6>
 ```
+
+Pass one `--md1` per line of the md1 card; this policy's md1 has six.
 
 The order of `--mk1` repetitions is a BIP-67 sorted set; the toolkit
 re-sorts on its side, so the on-screen ordering you pass does not
@@ -134,7 +154,7 @@ A common arrangement:
 |---|---|---|
 | Red (ms1) | only cosigner N | their own ms1 (1 string) |
 | Blue×3 (mk1s) | every cosigner | three mk1 cards (2 strings each) |
-| Green (md1) | every cosigner | shared md1 (3–4 strings) |
+| Green (md1) | every cosigner | shared md1 (6 strings for this policy) |
 
 The mk1 plates are public, so distributing them is harmless. The
 md1 plate is also public (it carries no secret). Only the personal
@@ -153,8 +173,8 @@ remains:
 | Lost / damaged | Recovery |
 |---|---|
 | One cosigner's ms1 | Other two cosigners' ms1s + the public mk1 set + md1 reconstruct the wallet. The lost ms1 is a regenerable surface (re-stamp from the still-valid phrase, if the cosigner can restate it). |
-| One mk1 plate | Re-derive from any cosigner's seed via `mnemonic convert --from phrase=… --to mk1`. The mk1 carries no secret; rebuilding it is fast. |
-| The md1 plate | Re-derive from `mnemonic export-wallet --template wsh-sortedmulti --threshold 2 --slot @N.xpub=…` (one slot per cosigner; only their xpubs are needed, no seeds). |
+| One mk1 plate | Re-run the watch-only `mnemonic bundle --template wsh-sortedmulti --threshold 2 --slot @N.xpub=… --slot @N.fingerprint=…` (one pair per cosigner, as in the [air-gapped variant](#air-gapped-variant)); it re-emits every mk1. `convert --to mk1` cannot do this: an mk1 binds its xpub to the wallet policy, so it comes only from `bundle`. The mk1 carries no secret; rebuilding it is fast. |
+| The md1 plate | Re-derive from the same watch-only `mnemonic bundle` (one xpub and fingerprint per cosigner; no seeds are needed). |
 | Any *one* full card category (all ms1s, or all mk1s, or the md1) | Recoverable — the seeds reconstruct everything from scratch given the policy. |
 | Two ms1s + the md1 | The threshold is 2; the surviving two seeds spend the wallet. |
 | Three ms1s lost | Wallet is bricked — funds unrecoverable. |
@@ -171,14 +191,18 @@ their own air-gapped device:
 1. **On each cosigner's machine**, run:
 
    ```sh
-   mnemonic convert \
-     --from phrase="<their phrase>" \
-     --to xpub \
-     --template wsh-sortedmulti \
-     --account 0
+   printf '%s' '<their phrase>' \
+     | mnemonic convert \
+         --from phrase=- \
+         --to xpub \
+         --to fingerprint \
+         --template wsh-sortedmulti \
+         --account 0
    ```
 
-   Output is the cosigner's xpub at the multisig derivation path.
+   Output is the cosigner's xpub at the multisig derivation path and
+   their master fingerprint. The phrase is read from stdin
+   (`--from phrase=-`); a phrase on the command line is refused.
 
 2. **On the coordinator's machine**, with only the three xpubs (no
    secrets), run:
@@ -188,10 +212,13 @@ their own air-gapped device:
      --network mainnet \
      --template wsh-sortedmulti \
      --threshold 2 \
-     --slot @0.xpub=<xpub-0> \
-     --slot @1.xpub=<xpub-1> \
-     --slot @2.xpub=<xpub-2>
+     --slot @0.xpub=<xpub-0> --slot @0.fingerprint=<fingerprint-0> \
+     --slot @1.xpub=<xpub-1> --slot @1.fingerprint=<fingerprint-1> \
+     --slot @2.xpub=<xpub-2> --slot @2.fingerprint=<fingerprint-2>
    ```
+
+   Pass each cosigner's fingerprint: without it the cards record
+   `00000000` as that cosigner's master fingerprint.
 
    This emits the *watch-only* bundle: three mk1s + one md1, no ms1.
    The watch-only bundle is what every cosigner engraves on their
@@ -200,9 +227,8 @@ their own air-gapped device:
 3. **On each cosigner's machine**, separately, run:
 
    ```sh
-   mnemonic convert \
-     --from phrase="<their phrase>" \
-     --to ms1
+   printf '%s' '<their phrase>' \
+     | mnemonic convert --from phrase=- --to ms1
    ```
 
    Output is just their personal ms1 string. Each cosigner engraves

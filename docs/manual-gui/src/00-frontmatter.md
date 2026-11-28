@@ -13,9 +13,12 @@ manual.
 > **MIT License.** This manual is freely redistributable under MIT
 > terms. See the `LICENSE` file in the source repository.
 
-This is **manual-gui v1.0**, tracking `mnemonic-gui v0.3.0` and the
-CLI versions that release pinned (toolkit `v0.13.0`, md-cli `v0.5.0`,
-ms-cli `v0.2.1`, mk-cli `v0.3.1`). The manual is a *living document*:
+This manual (released under its own `manual-gui-v*` tags) tracks
+`mnemonic-gui v0.63.0` and the CLI versions that release pinned
+(toolkit `v0.105.1`, md-cli `v0.20.3`, ms-cli `v0.20.1`, mk-cli
+`v0.13.0`), as recorded in `docs/manual-gui/pinned-upstream.toml`. The
+toolkit installer may pin newer CLIs; see
+[the installer-ahead note](#installer-ahead). The manual is a *living document*:
 each `manual-gui-v*` tag attaches a fresh PDF asset to the
 corresponding GitHub release and pushes the rendered HTML to
 `https://bg002h.github.io/mnemonic-toolkit/manual-gui/`.

@@ -34,12 +34,20 @@ ambiguous.
 v0.8 split the two:
 
 ```sh
-mnemonic convert \
-  --from phrase="…" \
-  --to bip38 \
-  --passphrase "<BIP-39 passphrase>" \
-  --bip38-passphrase "<BIP-38 passphrase>"
+export BIP39_PASS='<BIP-39 passphrase>'
+export BIP38_PASS='<BIP-38 passphrase>'
+printf '%s' '<your phrase>' \
+  | mnemonic convert \
+      --from phrase=- \
+      --to bip38 \
+      --path "m/84'/0'/0'/0/0" \
+      --passphrase @env:BIP39_PASS \
+      --bip38-passphrase @env:BIP38_PASS
 ```
+
+(The phrase comes on stdin and both passphrases from the environment:
+`mnemonic` refuses a phrase or passphrase typed on the command line,
+exit 2. See [Secret material on argv is REFUSED](#argv-refusal).)
 
 The two arguments are now independent. On a composite
 `(seedqr|phrase|entropy) → bip38` edge, `--bip38-passphrase` is
@@ -69,11 +77,15 @@ at NULL). So passing a NULL-byte passphrase via `--passphrase` or
 v0.8 added `--passphrase-stdin` to close this gap:
 
 ```sh
+export WIF='<WIF private key>'
 printf '\x00secret' | mnemonic convert \
-  --from wif="…" \
+  --from wif=@env:WIF \
   --to bip38 \
   --passphrase-stdin
 ```
+
+(stdin carries the passphrase here, so the WIF comes from the
+environment with `@env:`.)
 
 The flag tells the binary to read `--passphrase`'s value from stdin
 (raw, no newline-stripping, no UTF-8 normalisation), preserving

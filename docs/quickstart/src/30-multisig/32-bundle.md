@@ -48,13 +48,17 @@ discipline as [Generating entropy safely](../20-singlesig/22-generate-entropy.md
 :::
 
 ```sh
+export SEED_0='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+export SEED_1='legal winner thank year wave sausage worth useful legal winner thank yellow'
+export SEED_2='letter advice cage absurd amount doctor acoustic avoid letter advice cage above'
+
 mnemonic bundle \
   --network mainnet \
   --template wsh-sortedmulti \
   --threshold 2 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-  --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
-  --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
+  --slot @0.phrase=@env:SEED_0 \
+  --slot @1.phrase=@env:SEED_1 \
+  --slot @2.phrase=@env:SEED_2 \
   --self-check
 ```
 
@@ -71,10 +75,13 @@ Four flags carry the multisig-specific work:
 - **`--threshold 2`** — the K of K-of-N. Required for any multisig
   template; ignored for single-sig. The toolkit enforces
   `1 ≤ K ≤ N ≤ 16`.
-- **`--slot @N.phrase=…`** repeated three times — one slot per
+- **`--slot @N.phrase=@env:SEED_N`** repeated three times — one slot per
   cosigner, indexed `@0` through `@2`. The slot index becomes the
   cosigner index in the BIP-388 wallet policy. Single-sig used only
-  `@0`; multisig adds `@1`, `@2`, etc.
+  `@0`; multisig adds `@1`, `@2`, etc. Each phrase comes from the
+  environment variable it names (`@env:`): `mnemonic` refuses a phrase
+  typed on the command line (exit 2), and stdin (`=-`) carries only
+  one phrase per command.
 - **`--self-check`** — re-parses the emitted bundle and verifies it
   round-trips. A built-in sanity check that catches encode/decode
   drift before the cards reach steel.

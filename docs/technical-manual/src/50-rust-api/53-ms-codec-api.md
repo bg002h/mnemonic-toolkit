@@ -1,5 +1,14 @@
 # ms-codec Rust API
 
+> **Version note.** This chapter documents `ms-codec` **v0.1.1**. The current
+> release is newer: the toolkit resolves ms-codec 0.7.0 (its `Cargo.lock`),
+> and the `mnemonic-secret` repository is at 0.10.1. Among other changes, an
+> ms1 card is no longer BIP-39 entropy only: since 0.2 a `Mnem` card carries
+> its wordlist language, and the repository head adds a hashlock `Preimage`
+> kind. Check the
+> crate's own docs (`cargo doc -p ms-codec`) for the current surface, and pin
+> the version you use rather than the `"0.1"` shown below.
+
 This chapter is the reference for the `ms-codec`\index{ms-codec} crate's public surface at v0.1.1\index{ms-codec v0.1.1} (HEAD `c31f336` in `bg002h/mnemonic-secret`). It enumerates every public module, function, type, constant, and error variant. The wire format these APIs encode/decode is §II.3; this chapter is the library API only — the `ms-cli` binary lives in a sibling crate and its surface is covered in the end-user manual, not Part V. For the normative wire spec, see `mnemonic-secret/design/SPEC_ms_v0_1.md` and the in-tree BIP draft, plus `mnemonic-secret/MIGRATION.md` for the v0.1 → v0.2 K-of-N share-encoding migration contract.
 
 ## V.3.1 Crate purpose

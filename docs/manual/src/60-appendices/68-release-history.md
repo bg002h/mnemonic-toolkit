@@ -1,9 +1,15 @@
 # Appendix H — Release history
 
-This appendix is hand-curated for v0.1 of the manual; subsequent
-versions will switch to auto-extraction from each repo's
-`CHANGELOG.md` (filed as `release-history-auto-extract` in
-`docs/manual/FOLLOWUPS.md`).
+This appendix was hand-curated for v0.1 of the manual and has not been
+extended since (auto-extraction from each repo's `CHANGELOG.md` is filed
+as `release-history-auto-extract` in `docs/manual/FOLLOWUPS.md`). **The
+tables below stop at the early releases**: toolkit 0.8.0, md-codec 0.16.2,
+mk-cli 0.2.0 and ms-codec 0.1.1. The releases this manual documents are
+much newer: the installer pins `mnemonic` 0.107.1, `md` 0.21.0 (md-codec
+0.48.7), `ms` 0.21.0 and `mk` 0.17.0 (`install.sh --list` prints the
+current pins). `mr` and `mr-sitting` (mnemonic-refugium) have no table
+here. For anything after the rows below, read each repository's
+`CHANGELOG.md`.
 
 ## mnemonic-toolkit
 

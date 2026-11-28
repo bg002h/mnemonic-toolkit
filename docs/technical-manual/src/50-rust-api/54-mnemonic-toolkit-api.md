@@ -1,12 +1,24 @@
 # mnemonic-toolkit Rust API
 
+> **Version note.** This chapter documents `mnemonic-toolkit` **v0.8.0**. The
+> current release is newer (v0.107.1 at the time of this note), and one of its
+> central claims no longer holds: the crate now has a library target
+> (`crates/mnemonic-toolkit/src/lib.rs`, a hybrid lib + bin). In a normal build
+> it exports a focused set of modules: `bsms_crypto`, `config`,
+> `display_grouping`, `electrum_crypto`, `final_word`, `mlock`,
+> `permutation_search`, `process_hardening`, `secret_string`,
+> `secret_taxonomy`, `secrets`, `seed_xor`, `seedqr` and `slip39`
+> (`mnemonic-gui` links it for `secret_taxonomy`). Everything else, including
+> `ToolkitError` and the bundle orchestration modules described below, stays
+> crate-private. The module inventory below is the v0.8.0 snapshot.
+
 This chapter is the reference for the `mnemonic-toolkit`\index{mnemonic-toolkit} crate at v0.8.0\index{mnemonic-toolkit v0.8.0} (HEAD `4210b91c` in `bg002h/mnemonic-toolkit`). Unlike its three sibling chapters (§V.1, §V.2, §V.3), this chapter does **not** enumerate a public library API: `mnemonic-toolkit` v0.8.0 is a **binary-only crate** with no `[lib]` target and no `src/lib.rs`. The `[[bin]] name = "mnemonic"` declaration at `crates/mnemonic-toolkit/Cargo.toml` is the crate's only build target; every `mod foo;` in `src/main.rs` is private at crate root. External crates cannot `use mnemonic_toolkit::*` at v0.8.0. Per SPEC §4.2.5 Part V scope, the CLI surface (clap-derived `*Args` structs, `cmd::*::run` dispatch) is **out of scope** for this chapter and lives in the end-user manual instead. What Part V documents here is the consumer contract that an external program **can** target today without a library facade: the JSON envelope schema emitted by `mnemonic bundle` / `mnemonic verify-bundle` on stdout, the engraving-card layout emitted on stderr, the orchestration modules that produce them, and the `ToolkitError` taxonomy mapped to exit codes.
 
 ## V.4.1 Crate purpose
 
 `mnemonic-toolkit`\index{mnemonic\_toolkit (crate)} is the orchestration crate of the m-format-star: it composes the three sibling codecs (`ms-codec`, `mk-codec`, `md-codec`) into end-to-end bundle creation (`bundle`), bundle verification (`verify-bundle`), seed-material conversion (`convert`), watch-only wallet export (`export-wallet`), and BIP-85 child-derivation (`derive-child`). The crate owns descriptor parsing (BIP-388 placeholder lexing plus `miniscript::Descriptor` walk), distinct-key enforcement, network/template/path-family selection, BIP-39 / BIP-38 / SLIP-0132 input plumbing, and the unified slot-input pipeline (`@N.subkey=value`).
 
-The crate has **no library target**\index{binary-only crate} at v0.8.0. The `pub` items in `src/*.rs` are reachable only within this binary or its `tests/` integration suite — they form a candidate library facade that v0.9+ may extract, but no external crate compiles against them today. Sibling codecs are git-pinned (§V.4.8) rather than published to crates.io; downstream consumers integrate by spawning the `mnemonic` binary and consuming its JSON envelopes (§V.4.5) or its engraving cards (§V.4.6).
+The crate had **no library target**\index{binary-only crate} at v0.8.0 (it has one now; see the version note above). The `pub` items in `src/*.rs` are reachable only within this binary or its `tests/` integration suite — they form a candidate library facade that v0.9+ may extract, but no external crate compiles against them today. Sibling codecs are git-pinned (§V.4.8) rather than published to crates.io; downstream consumers integrate by spawning the `mnemonic` binary and consuming its JSON envelopes (§V.4.5) or its engraving cards (§V.4.6).
 
 ## V.4.2 Feature flags
 

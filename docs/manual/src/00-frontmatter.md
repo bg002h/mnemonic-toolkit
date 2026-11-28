@@ -8,10 +8,11 @@ four formats and to the `mnemonic-toolkit` integration tool.
 > **MIT License.** This manual is freely redistributable under MIT terms.
 > See the `LICENSE` file in the source repository.
 
-This is **manual v0.1**, tracking `mnemonic-toolkit` `main` (initial
-sync targets toolkit `v0.8.0`). The manual is a *living document*: each
-toolkit tag triggers a fresh PDF build attached to the corresponding
-GitHub release.
+This manual tracks `mnemonic-toolkit` `master`; the CLI versions it
+documents are the ones the toolkit's installer pins (`install.sh --list`
+prints them). The manual is a *living document*, released under its own
+`manual-v*` tags: each such tag builds the PDF and HTML and attaches
+them to that tag's GitHub release.
 
 ## Who is this manual for?
 

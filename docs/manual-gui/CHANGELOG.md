@@ -8,6 +8,8 @@ numbers.
 
 ## [Unreleased]
 
+**The front matter names the current pins.** It said manual-gui v1.0 tracking mnemonic-gui v0.3.0 (toolkit v0.13.0, md-cli v0.5.0, ms-cli v0.2.1, mk-cli v0.3.1), against the body's and `pinned-upstream.toml`'s mnemonic-gui v0.63.0 (toolkit v0.105.1, md-cli v0.20.3, ms-cli v0.20.1, mk-cli v0.13.0); it now names those and points to `{#installer-ahead}`.
+
 **The installer's newer toolkit tag moves to 0.107.1** (no `mnemonic` change; the release carries the md, ms and mk pins above). `[installer-ahead]` and §82 name it; nothing else in the GUI-facing text changes.
 
 **The installer's md, ms and mk tags move to 0.21.0, 0.21.0 and 0.17.0** (each md1, ms1 and mk1 string printed once, on stdout; `--group-size` now groups stdout and defaults to `0`; `ms hashlock` prints no preimage on the card under `--out` or `--json`; `md decompose` proves a mint route before printing it). `[installer-ahead]` and §82 name them; §82 says the four encode forms print the unbroken string because this GUI does not send its shown default `--group-size 5`, and lists three more `ms` outputs and three more `md` outputs. The GUI re-pin to these CLIs follows (mnemonic-gui 0.64.0), after which the table and section go.
