@@ -186,7 +186,7 @@ If the supplied phrase does not match the entropy in the `ms1`
 | `ms1` and `--phrase` both `-` | exit 1 with `error: cannot read both ms1 and --phrase from stdin` |
 | Positional `ms1` is not a parseable BIP-93 string | exit 1 with `error: <codex32 parse error>` |
 | `ms1` has wrong HRP / threshold / share-index / prefix byte | exit 2 with the matching `FormatViolation` message |
-| `ms1` tag reserved-not-emitted in v0.1 | **exit 3, success-shaped stdout** `OK: valid future format (v0.2+, tag <tag>)` (per `verify.rs:127`); stderr silent in text mode (suppressed by the `FutureFormat` carve-out at `ms-cli/src/main.rs:147-155`). Under `--json`, the binary emits the standard error envelope on stdout instead |
+| `ms1` tag reserved for a planned kind (`seed`, `xprv`) | **exit 3**, nothing on stdout, and on stderr `error: tag "<tag>" is planned but not yet supported by this ms (no seed or xprv card can be read yet); nothing was checked`. The card was not verified. Under `--json`, the standard error envelope goes to stdout instead |
 | `--phrase` supplied and does not round-trip-match the decoded entropy | **exit 4** with `error: phrase mismatch (decoded does not match --phrase)` |
 | `--phrase` does not parse under the chosen `--language` | exit 1 with `error: <bip39 error>` per `friendly_bip39` |
 | `--language <token>` not a member of the 10-value set | clap-level value-parser refusal |
