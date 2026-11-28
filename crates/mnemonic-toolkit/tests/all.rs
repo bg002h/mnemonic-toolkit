@@ -74,6 +74,7 @@ mod cli_convert_language_advisory;
 mod cli_convert_minikey;
 mod cli_convert_mk1_slip0132_hint;
 mod cli_convert_path;
+mod cli_convert_phrase_out_dir;
 mod cli_convert_refusals;
 mod cli_convert_round_trips;
 mod cli_convert_slip0132;
