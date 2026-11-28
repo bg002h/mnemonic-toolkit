@@ -1,0 +1,12 @@
+# ms1 (omitted — descriptor watch-only mode)
+
+# mk1[0] (cosigner 0 xpub + origin)
+
+# mk1[1] (cosigner 1 xpub + origin)
+
+# md1 (multisig wallet policy)
+md1fn8g7pspqgmtvqqcy8ppgtcgu79mg9dcdzxlz9wpy0dhkzljh5lgf5uyqkd0ptjvxd7msjtccqja0zq4ct
+md1fn8g7psg36d65qt9vhwt0zvw37ud803crereme7a0wwmsn6ycq7h6euj4rxaqgv2trjwq5pmwpjjmgdexs
+md1fn8g7pshrv5w4uyd0ddqdyudxs3674pql3ydxtrkr562rm0dwky0fdnhtj3pmxqpxyg6qxag3hsv9reqg5
+md1fn8g7ps7e9ntmkqfc9kgpzghvxxpp0v36vujm98eemfe62fpmsfvdhea98e4utkd776qqj9rfm4300wml0
+
