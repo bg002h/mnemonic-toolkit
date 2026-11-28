@@ -1561,6 +1561,8 @@ fn compute_outputs(
                     crate::derive_slot::entropy_in_language(&m, language.into())
                 }
                 Phrase => {
+                    // SAFETY: third-party-blocked — `bip39::Mnemonic` has no
+                    // Drop+Zeroize; FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`.
                     let m =
                         Mnemonic::parse_in(language.into(), value).map_err(ToolkitError::Bip39)?;
                     // F-579 (see the seedqr arm).

@@ -91,6 +91,17 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/derive_slot.rs",
         evidence: &["derive_master_seed(&mnemonic, passphrase)"],
     },
+    ZeroizeRow {
+        label: "entropy_in_language (F-579) returns the read-back entropy as Zeroizing<Vec<u8>>",
+        source_file: "src/derive_slot.rs",
+        evidence: &["-> Zeroizing<Vec<u8>> {"],
+    },
+    // ---- phrase_file.rs (`convert --phrase-out-dir`) ----
+    ZeroizeRow {
+        label: "check_existing compare buffer (an existing file's bytes) is Zeroizing<Vec<u8>>",
+        source_file: "src/phrase_file.rs",
+        evidence: &["let mut buf: Zeroizing<Vec<u8>> ="],
+    },
     // ---- bip85.rs (master-secret derivation) ----
     // R1 I-4 fold: bip85 entropy buffer is `Zeroizing<[u8; 64]>` returned
     // by `derive_entropy` and consumed by every format_* function via
@@ -580,8 +591,10 @@ const TEST_ONLY_SECRET_FILES: &[&str] = &[
     "src/bundle_unified.rs", // the sole SecretString::new is the #[cfg(test)] s() SlotInput fixture (cycle-14 L22); SlotInput.value's canonical row is src/slot_input.rs
 ];
 
-/// Persistent glob-cardinality floor. The partition is exactly 40
-/// secret-bearing src files @ Cycle G (`repair-engine-outcome-zeroization`
+/// Persistent glob-cardinality floor. The partition is exactly 41
+/// secret-bearing src files since `convert --phrase-out-dir` added
+/// `src/phrase_file.rs` (its compare buffer is a row). Was 40 @ Cycle G
+/// (`repair-engine-outcome-zeroization`
 /// added `src/repair.rs` as a declared secret-bearing row — the repair
 /// engine's corrected/original chunks migrated `String` → `SecretString`).
 /// Was 39 @ v0.71.0 (wave2 T2 added `src/cmd/inspect.rs`). The static "37"
@@ -593,7 +606,7 @@ const TEST_ONLY_SECRET_FILES: &[&str] = &[
 /// make the scan vacuously pass. Deleting a secret-bearing file is a
 /// conscious security-adjacent choice, so requiring a deliberate floor edit
 /// is the correct friction. Mirrors the `ZEROIZE_ROWS.len()` count guard.
-const SECRET_FILE_FLOOR: usize = 40;
+const SECRET_FILE_FLOOR: usize = 41;
 
 /// Recursively collect every `*.rs` under `dir`, returning crate-root-relative
 /// forward-slash paths (matching `ZEROIZE_ROWS.source_file` form).
