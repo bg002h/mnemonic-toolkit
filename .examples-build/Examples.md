@@ -179,7 +179,7 @@ Commands:
   addresses         list a wallet's receive/change addresses (batch, read-only)
   decode-address    decode a Bitcoin address → network(s) / script type / witness version / scriptPubKey
   export-wallet     emit watch-only wallet artifacts (Bitcoin Core importdescriptors, BIP-388 wallet_policy)
-  import-wallet     import a third-party wallet blob into an m-format bundle (v0.26.0 Phase 2: BSMS Round-2 only)
+  import-wallet     import a third-party wallet blob into an m-format bundle (BSMS, Bitcoin Core, Coldcard, descriptor, Electrum, Jade, Sparrow, Specter)
   derive-child      derive deterministic child entropy / keys from a master xprv (BIP-85)
   electrum-decrypt  decrypt an Electrum field-encrypted secret (seed phrase / xprv) with a password
   final-word        emit the set of BIP-39 last words that yield a valid checksum for an N-1 partial phrase
@@ -196,7 +196,7 @@ Commands:
   compare-cost      compare wsh-vs-tr per-spending-condition cost for a miniscript or descriptor
   xpub-search       search for a target (xpub, descriptor, address, or passphrase) under a seed or xpub
   verify-message    verify a Bitcoin message signature (legacy P2PKH signmessage + BIP-322 segwit/taproot)
-  restore           emit a watch-only restore document (single-sig) from a seed + optional passphrase
+  restore           emit a watch-only restore document (single-sig, or multisig with --md1) from a seed + optional passphrase
   build-descriptor  build a validated wsh(...) descriptor + BIP-388 policy from a JSON policy-tree spec
   word-card         encode an mk1/md1 card as an engravable BIP-39 Word Card (+ optional RAID), or --decode one back
   help              Print this message or the help of the given subcommand(s)

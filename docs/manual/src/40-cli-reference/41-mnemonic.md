@@ -1667,8 +1667,10 @@ tr(UNSPENDABLE(liana),…)`).
 ## `mnemonic import-wallet`
 
 Import a third-party wallet blob into an m-format bundle. Parses a
-foreign wallet export (BSMS Round-2 per BIP-129, or Bitcoin Core's
-`listdescriptors` JSON), reconstructs the equivalent watch-only
+foreign wallet export (BSMS Round-2 per BIP-129, Bitcoin Core's
+`listdescriptors` JSON, a Coldcard single-sig or multisig export, a
+bare descriptor file, or an Electrum, Jade, Sparrow or Specter export),
+reconstructs the equivalent watch-only
 bundle, and round-trips it back through the toolkit canonicalizer
 to surface byte-exact vs semantic-only equivalence (see [foreign
 wallet formats](#foreign-wallet-formats) for the format taxonomy).
@@ -1676,9 +1678,10 @@ wallet formats](#foreign-wallet-formats) for the format taxonomy).
 See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
 for the non-blocking `older()` advisory this command emits on intake.
 
-v0.26.0 ships two source formats — `bsms` and `bitcoin-core` —
-selectable via `--format` or auto-detected by sniff. Both formats
-are watch-only by design; the resulting bundle's cosigners carry no
+Nine source formats are accepted — `bitcoin-core`, `bsms`, `coldcard`,
+`coldcard-multisig`, `descriptor`, `electrum`, `jade`, `sparrow` and
+`specter` — selectable via `--format` or auto-detected by sniff
+(`descriptor` is explicit-only). All are watch-only by design; the resulting bundle's cosigners carry no
 secret material unless the user supplies an `--ms1` / `--slot
 @N.phrase=` seed overlay (see [seed overlay](#mnemonic-import-wallet-seed-overlay)).
 Bitcoin Core blobs containing `xprv` extended private keys are
