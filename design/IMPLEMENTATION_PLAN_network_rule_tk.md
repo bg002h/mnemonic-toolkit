@@ -1,8 +1,10 @@
 # IMPLEMENTATION PLAN: the network rule in mnemonic-toolkit (units 0, 1, 2, 3, 7, 8a, 8b-toolkit)
 
-Status: plan r1 (author: Claude Opus 5.5, 2026-11-28). r0 at 66a798a0; r1
-folds R0 review `design/agent-reports/network-rule-tk-plan-r0.md` (0C/10I/16M/4N)
-and the coordinator's rulings on it (§8 lists every finding's disposition).
+Status: plan r2 (author: Claude Opus 5.5, 2026-11-28). r0 at 66a798a0; r1
+(c8a3f61d) folds R0 review `design/agent-reports/network-rule-tk-plan-r0.md`
+(0C/10I/16M/4N) and the coordinator's rulings on it; r2 folds R1 review
+`design/agent-reports/network-rule-tk-plan-r1.md` (0C/2I/7M/1N) and the
+coordinator's rulings on that (§8 lists every finding's disposition, R0 and R1).
 Normative: `design/SPEC_network_rule.md` (Spec A: §1-§13, units 0, 1, 7) and
 `design/SPEC_network_rule_tk_rest.md` (Spec B: units 2, 3, 8a, 8b). Where this
 plan and a spec disagree, the spec wins and the plan is the defect. The §3 text
@@ -159,8 +161,8 @@ Binding and comparison rules `evaluate` implements (each has unit tests):
   sentence. A key and an address of the run that disagree with each other: TX-H3
   drops `Rerun with <remedy>, or ` and TX-H1 drops its first remedy sentence;
   an address that agrees with the run prints no TX-H3. Several `--target-address`
-  values: each address is its own source, same-kind addresses that disagree
-  with the run merge like keys (M-15).
+  values: each address is its own source and prints its own TX-H3, in input
+  order; addresses never merge, because §3 gives TX-H3 no plural (R1-M2).
 - **B7 (N6/N7/N12).** No source at all, `reads_kept`, not `seed_only`: TX-N
   (`given == false`), TX-T (test net), nothing (`--network mainnet`). SOFT only
   + `accept_coin_type`: Proceed with one TX-S-OK per overridden (merged)
@@ -290,7 +292,9 @@ and the verb).
 ### Step 0 (before unit 0): the test census
 
 `design/network-rule/test-census-tk.md` (committed with this plan) lists the
-102 integration-test functions that carry test-network material, the 6 with a
+90 integration-test functions that carry test-network material (r2: 12
+helper functions that r1 listed as tests now sit in their own section, each
+with the tests that call it; R1-M6), the 5 with a
 mainnet key on a test `--network`, and the src unit tests that pin today's
 refusals, each with its flag class and the expected outcome. At every unit, the
 implementer runs the touched test files once (captured to a file) and checks
@@ -333,9 +337,15 @@ the code.
   `nr1_export_wallet_import_json_coin_type_soft`,
   `nr1_export_wallet_import_json_contradicts_itself`.
 - `wallet_export/bsms.rs:133`: keep the guard (bsms is also reached from
-  restore's `--format`, `restore.rs:3213` `build_import_payload`), changed to
-  build a one-key `Input` and return `NetworkRule` (M-11). It is unreachable
-  from export-wallet's arms after unit 1.
+  restore's `--format`, `restore.rs:3213` `build_import_payload`), but as an
+  internal invariant, not a user-facing line (R1-M5): the emitter has no
+  `RunNet.given`, raw `<pfx>` or `<who>`, so it cannot render TX-H1. It returns
+  `ToolkitError::BadInput("internal: bsms export reached with a key of another
+  network than the run; this is a bug")` (exit 1; no new variant, and no
+  `debug_assert!`, so a unit test can reach it). Every caller (export-wallet's
+  arms after unit 1, restore `--format` after unit 2) runs the rule first, so it
+  is unreachable from the CLI; a unit test calls the emitter directly with a
+  test key on a mainnet run and asserts that text.
 
 ### Unit 7: build-descriptor (Spec A unit 7; R7.1-R7.10; erratum E1)
 
@@ -405,6 +415,7 @@ What each parser does after this unit (I-5). `p.network` is a placeholder
 | bsms | `network_from_origins` (`bsms.rs:402-429`): cosigners' coin types differ; coin not in {0,1} | deleted (network inference); each key's coin -> `KeyCoin` (B1: a coin outside {0,1} is no source) |
 | bsms | `coin_type_from_path` (`:431-450`): fewer than 2 components; coin step not hardened | deleted (only network inference uses it) |
 | bsms | `assert_slots_network_agrees` (`:272`) | deleted; central check |
+| bsms | first-address audit (`derive_first_address(&parsed, network)`, `:313`; WARNING on mismatch) | moved after the central check, run on the RUN network (R1-I1; below) |
 | bitcoin-core | `network_from_origins` / `coin_type_from_path` (`bitcoin_core.rs:852-897`), same four refusals | deleted, as bsms |
 | bitcoin-core | `assert_slots_network_agrees` (`:722`) | deleted |
 | descriptor | `network_from_origins` / `coin_type_from_path` (`descriptor.rs:177-222`) | deleted, as bsms |
@@ -423,6 +434,27 @@ What each parser does after this unit (I-5). `p.network` is a placeholder
 | coldcard (generic JSON) | `chain` must be BTC or XTN (sniff `:155-160`, parse `:216-224`) | accepts XRT too; any other value stays refused (shape) |
 | every parser | descriptor/format shape, missing fields, xprv forbidden, watch-only | kept |
 
+- bsms first-address audit (R1-I1). The audit at `bsms.rs:280-350` derives the
+  first address on the parser's inferred network; with the inference deleted
+  it would run on the placeholder and warn falsely on every correct test blob.
+  So it moves out of `BsmsParser::parse` into
+  `wallet_import::bsms::first_address_audit(p: &ParsedImport, run:
+  bitcoin::Network, stderr)`, called by `cmd/import_wallet.rs` right after the
+  central check passes for that `ParsedImport` (and so after `p.network` is the
+  run network), for every shape whose provenance carries a declared address
+  (`p.bsms_audit()`: the 6-line shape and the 4-line shape). The `Parser` trait
+  signature does not change. Its warning and notice texts, the taproot skip and
+  the `/**` expansion move unchanged. A refused run never reaches it (the
+  refusal prints before any audit line). New tests:
+  `nr3_bsms_first_address_audit_uses_run_network` (a 6-line test-network blob
+  built with the file's `build_bsms_6line` helper from tpubs at
+  `m/48'/1'/0'/2'`, its declared address the `tb1q...` the toolkit derives on
+  testnet; `--network testnet`: exit 0, stderr has no "first-address
+  mismatch"), and the existing `bsms_first_address_mismatch_warning` (mainnet)
+  stays green unchanged. The declared first address is itself an address HRP,
+  an N1 HARD source that Spec A §4.1's import-wallet row does not list; it is
+  NOT made a source in this PR (N4: the §4.1 table binds) and is filed as a
+  FOLLOWUP for the spec owner beside A16 (A18).
 - Every parser fills new `ParsedImport` fields (`wallet_import/mod.rs:315`):
   `key_sources: Vec<Source>` (who per format: `jade key @N`,
   `coldcard-multisig key @N` in the file's key-line order; `key @i` for
@@ -446,7 +478,15 @@ What each parser does after this unit (I-5). `p.network` is a placeholder
   tests that assert the deleted refusals (they become positive parse tests).
 - TRACE: `nr3_coldcard_chain_against_key_refused`,
   `nr3_coldcard_consistent_unchanged`, `nr3_jade_names_jade_and_exits_8`,
-  `nr3_import_test_blob_no_flag_refused`.
+  `nr3_import_test_blob_no_flag_refused`. Plan test (no TRACE row):
+  `nr3_bsms_first_address_audit_uses_run_network`.
+- Coldcard sections the parser does not import (R1-M7). The parser imports
+  only the dominant section (`coldcard.rs:430-431`; `bip48_*` ignored). Every
+  section's key still counts for TX-H4 and TX-H4C (the file's statement and its
+  keys: a file that contradicts itself is refused whichever section is
+  imported). The key-form TX-S (a section's path coin against that section's
+  key) is evaluated only for the imported section, since no other section's
+  path reaches the output. Reading A17.
 
 ### Unit 8a: the toolkit remainder (Spec B 8a; R8a.1-R8a.24)
 
@@ -462,13 +502,41 @@ What each parser does after this unit (I-5). `p.network` is a placeholder
 | restore `--origin` template completion | `restore.rs:965` (`explicit_origin`), `:1578` | `Coin{Flag("--origin")}` | same TRACE, template leg |
 | restore `--expect-xpub` | single-sig compare `restore.rs:607-624` and template-completion compare `:1044`; the check precedes both; `--allow-mismatch` does not pass it | `Key{who:"--expect-xpub"}` | `nr8a_restore_expect_xpub_network_first` |
 | xpub-search path/passphrase-of-xpub | `path_of_xpub.rs`, `passphrase_of_xpub.rs`, before the search | `Key{who:"--target-xpub"}` | `nr8a_xpub_search_refuses_before_search` |
-| xpub-search address-of-xpub | `address_of_xpub.rs:213-227` (replaced; no inference arm) | `Key{"--xpub"}`, one `Address{"--target-address"}` per value (B6) | same |
+| xpub-search address-of-xpub | `address_of_xpub.rs:213-227` (replaced; no inference arm) | `Key{"--xpub"}`, one `Address{"--target-address"}` per value, one TX-H3 each (B6) | same |
 | xpub-search account-of-descriptor | `account_of_descriptor.rs:232`, before intake/search | `descriptor_sources` (`key @0`), `--descriptor-from` too | `nr8a_xpub_search_account_of_descriptor_key_refused` |
 | nostr `--pubkey` / `--secret*` | `nostr.rs:161`, secret branch `:202` | none; `reads_kept`, `thing = Key`; after the key advisory; never TX-R | `nr8a_nostr_pubkey_prints_tx_n`, `nr8a_nostr_secret_prints_tx_n` |
 | derive-child | `derive_child.rs:230`, before any output | `Key{who:"--from xprv"}` | `nr8a_derive_child_tprv_no_flag_refused` |
 | import-wallet coin flag | unit 3's check with the flag | `KeyCoin`s | `nr8a_import_wallet_coin_type_flag` (fixtures `d_x1.txt`, `d_mixcoin.txt` with `--format descriptor`: TX-S for the coin-1 key, exit 8; with the flag exit 0, TX-S-OK) |
-| verify-bundle | `verify_bundle.rs::run`, after args are resolved (bundle-json load, positional HRP routing) and immediately before the first mode dispatch, `if !args.md1.is_empty()` at `:503`; one check covers every mode it then dispatches to (`verify_singlesig_template` :517, `verify_multisig_template` :536, `descriptor_mode_verify_run` :551, `run_multisig` :621, `run_full` :635, `run_watch_only` :644) | each `--mk1` card via `mk1_key_source` (`the mk1 card`, or `mk1 card @N` when several); each decoded md1 slot coin bound to the mk1 of that slot as `KeyCoin{Named("key @N")}` (I-2's binding), else `Coin`; a `--slot @N.xpub` key is a separate `Key{who:"--slot @N.xpub"}` and merges with the card of the same class (B5) | `nr8a_verify_bundle_network_refused_exit_8` (fixture `vb_signet_bip84.txt`: `--network mainnet --template bip84 --slot @0.phrase=$P --mk1 .. --md1 ..`, today rc 4; after: exit 8, the literal in §3.0, stdout empty), `nr8a_verify_bundle_cause_line` (rows fail and no source contradicts the run: TX-V after the rows, exit 4; with the flag on a SOFT-only run: TX-S-OK, then the rows as today) |
+| verify-bundle | `verify_bundle.rs::run`, after args are resolved (bundle-json load, positional HRP routing) and immediately before the first mode dispatch, `if !args.md1.is_empty()` at `:497` (R1-N1); one check covers every mode it then dispatches to (`verify_singlesig_template` :517, `verify_multisig_template` :536, `descriptor_mode_verify_run` :551, `run_multisig` :621, `run_full` :635, `run_watch_only` :644) | each `--mk1` card via `mk1_key_source` (`the mk1 card`, or `mk1 card @N` when several); each decoded md1 slot coin bound to the mk1 of that slot as `KeyCoin{Named("key @N")}` (I-2's binding), else `Coin`; a `--slot @N.xpub` key is a separate `Key{who:"--slot @N.xpub"}` and merges with the card of the same class (B5). Decoding here is best-effort (R1-M1): a card that does not decode (or needs auto-repair) is no source, and the mode then decodes, repairs and reports it exactly as today (RepairShortCircuit output unchanged); the check never refuses on a decode failure | `nr8a_verify_bundle_network_refused_exit_8` (fixture `vb_signet_bip84.txt`: `--network mainnet --template bip84 --slot @0.phrase=$P --mk1 .. --md1 ..`, today rc 4; after: exit 8, the literal in §3.0, stdout empty), `nr8a_verify_bundle_cause_line` (TX-V, R1-I2: see the condition below the table; legs `vb_mainnet_coin5.txt` prints TX-V, the signet `vb` leg without `--ms1` prints none; with the flag on a SOFT-only run: TX-S-OK, then the rows as today, and TX-V by the same condition) |
 | TX-R | §5 | | `nr8a_tx_r_on_secret_output_test_run` (R8a.21; legs derive-child, bundle, silent-payment) |
+
+**TX-V condition (R1-I2).** TX-V is printed after the rows, exit 4 unchanged,
+when (a) the run was not refused (no HARD line, and no unaccepted SOFT line),
+(b) at least one row failed, and (c) every failed row is one of the four
+network-sensitive rows `mk1_xpub_match`, `mk1_path_match`, `md1_xpub_match`,
+`md1_origin_match` (the only rows whose expected value depends on the run
+network: the key version and the coin step of the derived path; checked
+against every row name `verify_bundle.rs` emits at d72a18b1: `ms1_decode`,
+`ms1_entropy_match`, `mk1_decode`, `mk1_fingerprint_match`,
+`mk1_template_stub_bind`, `md1_decode`, `md1_wallet_policy`,
+`md1_template_match`, `wallet_id_match`, `wallet_completed` are not, since a
+master fingerprint, entropy, a policy shape or a decode do not change with the
+network). Any other failed row suppresses TX-V. The check reads the
+mode's row list once the mode has built it, and TX-V prints after the rows and
+the result line. Legs, all with literal strings:
+- `nr8a_verify_bundle_cause_line` positive: fixture `vb_mainnet_coin5.txt`
+  (a mainnet bundle whose key is at `m/84'/5'/0'`; coin 5 is no source, B1,
+  and the key is a mainnet xpub, so no source contradicts the run).
+  `verify-bundle --network mainnet --template bip84 --slot @0.phrase=$P --ms1
+  <ms1 of vb_signet_bip84.txt> --mk1 .. --md1 ..`: today rc 4 with exactly the
+  four rows failing; after: the same rows, then `note: every mismatch above is
+  a coin-type or key-version row: the bundle may be for another network than
+  --network mainnet; rerun with the network the bundle was made for.`, exit 4.
+- negative: `vb_signet_bip84.txt` with `--network signet` and no `--ms1`: only
+  `ms1_decode` fails (re-run today: rc 4); after: the same rows, no TX-V, exit 4.
+- The mainnet refusal leg (`nr8a_verify_bundle_network_refused_exit_8`) passes
+  `--ms1` too, so its today rows are only the four network rows (re-run: rc 4,
+  those four failing).
 
 **Step 8a-0: single-sig restore honours `--origin` (pending Brian's ruling;
 alternative: refuse `--origin` on single-sig restore).** Today the plain
@@ -482,9 +550,27 @@ at `:965-1030`); the JSON/text show the path as written. Own commit, own test
 `nr8a0_restore_single_sig_derives_at_origin` (phrase `$P`, `--template bip84
 --origin m/84h/1h/5h --network testnet`: the printed origin is `84'/1'/5'` and
 the key equals `convert --from phrase=$P --to xpub --path m/84h/1h/5h --network
-testnet`). Help text and manual change with it. If Brian picks the
-alternative: `--origin` without `--md1` is a `ModeViolation` (exit 2) and
-R8a.6's after leg becomes that refusal; the coordinator owns the spec erratum.
+testnet`). Help text and manual change with it.
+Proposal for its neighbours (R1-M4):
+- `--account` beside `--origin`: `--origin` already names the account step, so
+  a `--account` typed on the command line (clap `value_source` is
+  `CommandLine`; the default `0` does not count) beside `--origin` in
+  single-sig restore is a `ModeViolation` (exit 2): `error: restore: --origin
+  gives the whole path, account included; drop --account or drop --origin.`
+  Template completion keeps today's behaviour (`--origin` wins silently,
+  `restore.rs:965-988`); aligning it is filed as a FOLLOWUP, not changed here.
+- `--expect-xpub` beside `--origin`: compared with the key derived at
+  `--origin` (the key restore prints), after the network check as for every
+  `--expect-xpub` (R8a.22, R8a.23).
+- `--count`, `--json` and the text output are unchanged except that the
+  origin shown is the given path.
+Gating: step 8a-0 is the LAST code commit before the manuals (§6), so that
+when Brian answers it is kept, dropped, or swapped for the alternative without
+touching another commit. If Brian picks the alternative: `--origin` without
+`--md1` is a `ModeViolation` (exit 2) and R8a.6's after leg becomes that
+refusal; the coordinator owns the spec erratum. If he drops it: R8a.6's leg
+stays as the spec writes it and the restore `--origin` single-sig row of the
+table above goes with the commit.
 
 ### Unit 8b (toolkit part): existing refusals to exit 8 and one wording
 
@@ -562,16 +648,21 @@ this one, citing it.
 `private_out` (set where the verb's worst stdout class is `PrivateKeyMaterial`:
 `bundle.rs:1112`, convert's `worst_class_on_stdout` at `convert.rs:1287-1289`,
 `derive_child.rs:316`/`:333`, `import_wallet.rs:1394`, `silent_payment.rs:366`).
-After the verb returns Ok, `cli.rs` builds a sourceless `Input{secret_out:
-secret_input && private_out, ..}` and lets `evaluate` return TX-R (B7); the
+After the verb returns Ok, `cli.rs` builds a sourceless `Input{run: <the
+verb's RunNet>, sources: vec![], reads_kept: false, seed_only: true,
+accept_coin_type: false, thing: <any; unused>, secret_out: secret_input &&
+private_out}` (R1-M3: `reads_kept: false` and `seed_only: true` so B7 prints no
+second TX-N/TX-T) and lets `evaluate` return TX-R alone (B7); the
 trailer prints it after `report_at_exit` (§2.2). Verbs: bundle, convert,
 derive-child, import-wallet, silent-payment. nostr never sets `secret_input`.
 
 ## 6. Commit sequence and gates
 
 0. This plan, the census, the fixtures (done with r1).
-1. unit 0. 2. unit 1. 3. unit 7. 4. unit 2. 5. unit 3. 6. step 8a-0. 7. unit
-   8a. 8. unit 8b-toolkit + deletions. 9. manuals + help text. 10. FOLLOWUPS.
+1. unit 0. 2. unit 1. 3. unit 7. 4. unit 2. 5. unit 3. 6. unit 8a. 7. unit
+   8b-toolkit + deletions. 8. step 8a-0 (the last code commit, gated on Brian's
+   ruling: kept, dropped or swapped for the alternative refusal; R1-M4).
+   9. manuals + help text. 10. FOLLOWUPS.
    Each code commit has its TRACE tests failing first, then passing.
 - FOLLOWUPS (`design/FOLLOWUPS.md`): mark `status=resolved <sha>` ONLY for lines
   whose leg is built and green in this PR: as1-i2 (:6846), as1-i3 (:6847),
@@ -579,7 +670,9 @@ derive-child, import-wallet, silent-payment. nostr never sets `secret_input`.
   b-i1..i4 (:6854-6857; b-i4's mr half stays: close it only if the line scopes
   to the toolkit, else note "toolkit half resolved"). Leave as1-i1, as1-i5,
   c-i1 open (A10). File new lines: the md/mk 8b parts; the mnemonic-gui paired
-  change; A12-A14 for the spec owner; bundle `--import-json` table gap (I-7).
+  change; A12-A14 for the spec owner; bundle `--import-json` table gap (I-7);
+  the bsms declared first address as an unlisted address source (A18, R1-I1);
+  restore template completion's silent `--account` beside `--origin` (R1-M4).
 - Gate per commit (4 cores; `cargo nextest` is NOT installed, so use
   `cargo test --locked -p mnemonic-toolkit --test all -- <names>` for the unit's
   rows, and the full suite once per unit captured to a file and grepped):
@@ -635,8 +728,18 @@ derive-child, import-wallet, silent-payment. nostr never sets `secret_input`.
   pending Brian's ruling; the alternative is a refusal (§3 8a).
 - A16 `bundle --import-json` gains TX-H4C and TX-S (I-7), beyond Spec A §4.1's
   row; N4 binds. Filed as a table-gap FOLLOWUP for the spec owner.
+- A17 Coldcard sections not imported: they count for TX-H4/TX-H4C, not for the
+  key-form TX-S (unit 3; R1-M7). Spec owner to confirm.
+- A18 A BSMS blob's declared first address is an address HRP the §4.1
+  import-wallet row does not list as a source. Not a source here; the audit
+  runs on the run network after the check (R1-I1). FOLLOWUP for the spec owner.
+- A19 TX-V's "every mismatch above is a coin-type or key-version row" is
+  read as the four rows named in unit 8a (R1-I2). Spec owner to confirm the
+  row set.
 
-## 8. R0 fold (review `design/agent-reports/network-rule-tk-plan-r0.md`)
+## 8. Review folds
+
+### R0 fold (review `design/agent-reports/network-rule-tk-plan-r0.md`)
 
 | id | disposition |
 |---|---|
@@ -645,7 +748,7 @@ derive-child, import-wallet, silent-payment. nostr never sets `secret_input`.
 | I-3 | folded: B5 merge rules (key-form TX-S by pclass+kclass, run form per coin class); R3.6 literal |
 | I-4 | folded: step 8a-0, single-sig restore honours `--origin` (pending Brian; alternative refusal); site named; unit-2 template line corrected |
 | I-5 | folded: per-parser table in unit 3; inference refusals deleted, shape refusals kept; `p.network` placeholder; I-5 leg via `fx/d_mixcoin.txt` |
-| I-6 | folded: fixture `fx/vb_signet_bip84.txt` built and run (today rc 4); the site is one check in `verify_bundle.rs::run` before `:503`, covering all six modes; seed slot is no source, so the mk1 card is alone |
+| I-6 | folded: fixture `fx/vb_signet_bip84.txt` built and run (today rc 4); the site is one check in `verify_bundle.rs::run` before `:503` (r2: `:497`, R1-N1), covering all six modes; seed slot is no source, so the mk1 card is alone |
 | I-7 | folded: `envelope_source` shared with bundle `--import-json` (TX-H4, TX-H4C, TX-S); new plan test; A16 |
 | I-8 | folded: B1 (derived paths are no source); R1.12 one-line leg |
 | I-9 | folded: A3 settled on Spec A §3; R8a.11/R8a.12 literals |
@@ -670,3 +773,18 @@ derive-child, import-wallet, silent-payment. nostr never sets `secret_input`.
 | N-2 | folded (§6 `SHIB=/home/user`) |
 | N-3 | folded (recipes spelled out in `fx/README-owed-fixtures.md`, fixture built) |
 | N-4 | folded (§1 cites the #228 spec file and the #229 title) |
+
+### R1 fold (review `design/agent-reports/network-rule-tk-plan-r1.md`)
+
+| id | disposition |
+|---|---|
+| R1-I1 | folded: the bsms first-address audit moves out of `BsmsParser::parse` into `first_address_audit`, run by import-wallet after the central check on the run network (trait unchanged); test `nr3_bsms_first_address_audit_uses_run_network`; the declared address as an unlisted source is FOLLOWUP + A18 |
+| R1-I2 | folded: TX-V's condition is by failed rows (at least one fails, every failed row is one of `mk1_xpub_match`, `mk1_path_match`, `md1_xpub_match`, `md1_origin_match`, and the run was not refused); positive leg fixture `fx/vb_mainnet_coin5.txt` (re-run today: rc 4, those four rows), negative leg the signet `vb` run without `--ms1` (only `ms1_decode` fails); the mainnet refusal leg passes `--ms1`; A19 |
+| R1-M1 | folded: best-effort decode at the verify-bundle site; a card that does not decode is no source and the mode handles it as today |
+| R1-M2 | folded: one TX-H3 per `--target-address`, input order, no plural (B6, unit 8a table) |
+| R1-M3 | folded: §5 states every `Input` field of the post-run hook (`reads_kept: false`, `seed_only: true`, `sources: []`) |
+| R1-M4 | folded: step 8a-0 is the last code commit before the manuals, gated on Brian; `--account` typed beside `--origin` on single-sig restore is a ModeViolation (exit 2), template completion unchanged with a FOLLOWUP; `--expect-xpub` compares with the key at `--origin` |
+| R1-M5 | folded: the bsms emitter guard is an internal invariant (`BadInput("internal: ...")`, reachable only by a direct unit test), not a TX-H1 |
+| R1-M6 | folded: census tidied; 12 helpers moved to their own section with their callers; the five empty flag classes filled (p25_controls TESTFLAG, xpub_to_address_p2pkh MAINKEY+TESTFLAG(testnet), e1c/general_multipath/l1_tpub_network_omitted NOFLAG); 90 tests, 5 mainnet-key-on-test-flag tests |
+| R1-M7 | folded: non-imported Coldcard sections count for TX-H4/TX-H4C, not for the key-form TX-S; A17 |
+| R1-N1 | folded: the verify-bundle dispatch cite is `:497` |

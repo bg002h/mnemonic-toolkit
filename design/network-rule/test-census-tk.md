@@ -20,16 +20,12 @@ by a spec row is a regression.
 - bughunt_s4.rs::bughunt_tk_56_silent_payment_refuses_non_master_xprv NOFLAG
 - cli_addresses.rs::network_infer_override_and_mismatch MAINNET+TESTFLAG
 - cli_addresses_electrum.rs::electrum_watch_only_no_xpriv NOFLAG
-- cli_bip388_validity.rs::p25_controls_cosigner_internal_key_and_named_alternatives 
-- cli_bip388_validity.rs::ka NOFLAG
-- cli_bip388_validity.rs::kb NOFLAG
-- cli_bip388_validity.rs::ka_other_origin NOFLAG
+- cli_bip388_validity.rs::p25_controls_cosigner_internal_key_and_named_alternatives TESTFLAG
 - cli_bip388_validity.rs::bip388v_export_descriptor_same_xpub_other_origin_refused NOFLAG
 - cli_bip388_validity.rs::bip388v_export_descriptor_same_pubkey_other_chaincode_refused NOFLAG
 - cli_build_descriptor.rs::preset_success_json_and_network_compose TESTFLAG
-- cli_bundle_slip0132_info.rs::info_line NOFLAG
 - cli_convert_address.rs::phrase_to_account_upub_bip49_reference_testnet TESTFLAG
-- cli_convert_address.rs::xpub_to_address_p2pkh_explicit_script_type_v0_26_0 
+- cli_convert_address.rs::xpub_to_address_p2pkh_explicit_script_type_v0_26_0 MAINKEY+TESTFLAG(testnet)
 - cli_convert_address.rs::xpub_to_address_testnet_explicit_network_with_vpub TESTFLAG
 - cli_convert_convergence.rs::c3_four_encodings_same_master_fp NOFLAG
 - cli_convert_convergence.rs::c4_slip0132_variant_octet_round_trip MAINNET+TESTFLAG
@@ -40,7 +36,6 @@ by a spec row is a regression.
 - cli_convert_slip0132.rs::input_normalizer_testnet_vpub_to_xpub_normalizes_to_tpub NOFLAG
 - cli_convert_slip0132.rs::input_normalizer_testnet_upub_to_xpub_normalizes_to_tpub NOFLAG
 - cli_convert_slip0132.rs::output_xpub_prefix_testnet_zpub_emits_vpub TESTFLAG
-- cli_convert_slip0132_info.rs::info_line NOFLAG
 - cli_convert_slip0132_info.rs::convert_variant_coverage_upub_testnet NOFLAG
 - cli_convert_slip0132_info.rs::convert_variant_coverage_big_u_testnet NOFLAG
 - cli_convert_slip0132_info.rs::convert_variant_coverage_vpub_testnet NOFLAG
@@ -56,7 +51,6 @@ by a spec row is a regression.
 - cli_export_wallet_bsms.rs::bsms_4line_emit_2of3_wsh_multi_testnet TESTFLAG
 - cli_export_wallet_coldcard.rs::cell_1_coldcard_generic_bip84_mainnet_byte_exact MAINNET
 - cli_export_wallet_from_import_json.rs::p11a_helper_propagates_import_wallet_failure NOFLAG
-- cli_export_wallet_from_import_json.rs::extract_xpubs NOFLAG
 - cli_import_json_envelope_consistency.rs::envc_bundle_refuses_edited_origin_path NOFLAG+TESTFLAG
 - cli_import_json_envelope_consistency.rs::envelope_mk1_origin_path_only_mismatch_refused NOFLAG+TESTFLAG
 - cli_import_json_envelope_consistency.rs::envc_template_md1_envelope_refused TESTFLAG
@@ -72,15 +66,11 @@ by a spec row is a regression.
 - cli_import_wallet_snet_network_mismatch.rs::bitcoin_core_tpub_on_coin_type_0_rejects NOFLAG
 - cli_import_wallet_snet_network_mismatch.rs::bsms_tpub_on_coin_type_0_rejects NOFLAG
 - cli_import_wallet_snet_network_mismatch.rs::bsms_consistent_testnet_imports NOFLAG
-- cli_multipath_duplicate_refusal.rs::single NOFLAG
 - cli_multipath_duplicate_refusal.rs::bundle_template_duplicate_multipath_refused NOFLAG
 - cli_multipath_duplicate_refusal.rs::bundle_multisig_second_key_duplicate_multipath_refused NOFLAG
-- cli_network_fail_open.rs::assert_mismatch 
-- cli_network_fail_open.rs::e5_single_branch_desc NOFLAG
-- cli_network_fail_open.rs::e5_multipath_desc NOFLAG
 - cli_network_fail_open.rs::e1a_testnet_tpub_to_address_mainnet_rejects MAINNET
 - cli_network_fail_open.rs::e1b_testnet_tpub_to_address_testnet_agrees_ok TESTFLAG
-- cli_network_fail_open.rs::e1c_testnet_tpub_to_address_no_network_infers_ok 
+- cli_network_fail_open.rs::e1c_testnet_tpub_to_address_no_network_infers_ok NOFLAG
 - cli_network_fail_open.rs::e1_minor_signet_override_accepts_testnet_tpub TESTFLAG
 - cli_network_fail_open.rs::e2a_testnet_tpub_mainnet_network_rejects MAINNET
 - cli_network_fail_open.rs::e2b_testnet_tpub_testnet_network_agrees_ok TESTFLAG
@@ -105,10 +95,10 @@ by a spec row is a regression.
 - cli_restore_multisig.rs::md1_watch_only_no_private_material MAINNET
 - cli_restore_multisig.rs::md1_testnet_emits_tpub TESTFLAG
 - cli_restore_multisig_format.rs::format_payloads_are_watch_only NOFLAG+MAINNET
-- cli_restore_multisig_general.rs::general_multipath_0_1_reconstructs_with_multixpub_arm 
+- cli_restore_multisig_general.rs::general_multipath_0_1_reconstructs_with_multixpub_arm NOFLAG
 - cli_restore_multisig_general.rs::general_testnet_network_corrected NOFLAG+TESTFLAG
 - cli_snet_build_descriptor_network_warn.rs::l1_tpub_with_network_mainnet_warns_not_rejects NOFLAG+MAINNET+TESTFLAG
-- cli_snet_build_descriptor_network_warn.rs::l1_tpub_network_omitted_infers_testnet_preview 
+- cli_snet_build_descriptor_network_warn.rs::l1_tpub_network_omitted_infers_testnet_preview NOFLAG
 - cli_snet_build_descriptor_network_warn.rs::l1_tpub_with_network_testnet_no_warn TESTFLAG
 - cli_snet_convert_export_network_mismatch.rs::m14_tpub_reemit_into_mainnet_prefix_rejects MAINNET
 - cli_snet_convert_export_network_mismatch.rs::l11_testnet_wif_to_xpub_testnet_ok TESTFLAG
@@ -116,14 +106,29 @@ by a spec row is a regression.
 - cli_wallet_cross_format_convergence.rs::concrete_duplicate_cosigner_rejected_bip388 TESTFLAG
 - cli_xpub_search_address_of_xpub.rs::network_inference_from_tpub_prefix NOFLAG
 - cli_xpub_search_address_of_xpub.rs::network_signet_override_disambiguates_testnet_version_byte TESTFLAG
-- prop_backup_restore_roundtrip.rs::is_base58 NOFLAG
-- prop_backup_restore_roundtrip.rs::normalize NOFLAG
+
+## Helper functions holding test-network material (not tests)
+
+R1-M6: these were listed as tests. Each is named with the tests that call it; a red caller
+counts as on the list.
+
+- cli_bip388_validity.rs::ka: called by the 15 `bip388v_*` tests of the file that build descriptors from it (export-wallet descriptor refusals and guard emits)
+- cli_bip388_validity.rs::kb: called by bip388v_export_descriptor_nums_literal_before_multipath, bip388v_export_descriptor_nums_refused, bip388v_guard_distinct_keys_emit, bip388v_export_descriptor_extra_step_refused, bip388v_export_descriptor_policy_json_extra_step_refused, bip388v_guard_extra_step_alternatives_emit
+- cli_bip388_validity.rs::ka_other_origin: called by bip388v_export_descriptor_same_xpub_other_origin_refused
+- cli_bundle_slip0132_info.rs::info_line: called by bundle_descriptor_watch_only_zpub_emits_info_line_then_card_no_warning, bundle_multisig_full_zpub_cosigner_emits_info_then_card_then_warning, bundle_multisig_two_normalized_slots_emit_info_lines_in_slot_order, bundle_json_watch_only_zpub_emits_info_line_no_warning, bundle_no_engraving_card_zpub_emits_info_line_only
+- cli_convert_slip0132_info.rs::info_line: called by the 12 `convert_*` tests of the file (zpub/ypub/upub/vpub info lines)
+- cli_export_wallet_from_import_json.rs::extract_xpubs: called by p11b_happy_path_matrix_all_sources_all_descriptor_capable_dests
+- cli_multipath_duplicate_refusal.rs::single: called by bundle_concrete_duplicate_multipath_refused, import_wallet_descriptor_duplicate_multipath_refused, verify_bundle_duplicate_multipath_refused, bundle_distinct_multipath_still_accepted
+- cli_network_fail_open.rs::assert_mismatch: called by e1a_testnet_tpub_to_address_mainnet_rejects, e2a_testnet_tpub_mainnet_network_rejects, e2_minor_mk1_target_testnet_mainnet_network_rejects, e3a_testnet_tprv_mainnet_network_rejects, e4a_template_slot_testnet_xpub_default_mainnet_network_rejects, e4_minor_master_xpub_slot_testnet_default_mainnet_network_rejects, e5a_descriptor_testnet_tpub_default_mainnet_bsms_4line_rejects, e5e_multipath_testnet_tpub_default_mainnet_bsms_4line_rejects
+- cli_network_fail_open.rs::e5_single_branch_desc: called by e4d_descriptor_concrete_passthrough_ok, e5a_descriptor_testnet_tpub_default_mainnet_bsms_4line_rejects, e5b_descriptor_testnet_tpub_explicit_testnet_bsms_4line_ok, e5c_descriptor_testnet_tpub_default_mainnet_bsms_2line_ok
+- cli_network_fail_open.rs::e5_multipath_desc: called by e5e_multipath_testnet_tpub_default_mainnet_bsms_4line_rejects, e5e_multipath_testnet_tpub_explicit_testnet_bsms_4line_ok
+- prop_backup_restore_roundtrip.rs::is_base58: called by normalize (below)
+- prop_backup_restore_roundtrip.rs::normalize: called by backup_restore_roundtrip, tr_taproot_roundtrip, tr_taproot_smoke_both_variants, oracle1_rejects_dropped_timelock, oracle1_rejects_multi_sortedmulti_swap, oracle1_rejects_masked_timelock_value, oracle1_accepts_keyless_equivalent_redepth, smoke_handpicked_policies
 
 ## Mainnet key with a test --network
 
 - cli_bundle_h7_prefix_origin.rs::verify_bundle_carries_prefix_origin_through_reparse MAINKEY+TESTFLAG(regtest)
 - cli_convert_address.rs::xpub_to_address_p2pkh_explicit_script_type_v0_26_0 MAINKEY+TESTFLAG(testnet)
-- cli_network_fail_open.rs::assert_mismatch MAINKEY+TESTFLAG(testnet)
 - cli_non_canonical_descriptor.rs::non_canonical_default_path_consumes_account_arg MAINKEY+TESTFLAG(testnet)
 - cli_output_class.rs::export_wallet_emits_watch_only MAINKEY+TESTFLAG(testnet)
 - cli_output_class.rs::bundle_descriptor_emits_watch_only MAINKEY+TESTFLAG(testnet)

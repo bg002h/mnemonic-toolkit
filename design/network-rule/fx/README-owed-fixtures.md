@@ -13,7 +13,7 @@ Made with the toolkit built from master d72a18b1.
   --template bip84 --slot "@0.phrase=$P"` stdout. Leg: `verify-bundle --network mainnet --template bip84
   --slot "@0.phrase=$P" --mk1 <mk1 lines> --md1 <md1 line>`; today rc 4 with mk1_xpub_match/path/md1 rows
   failing. The seed slot is no source, so the mk1 card is the only HARD source (TX-H1 `the mk1 card`).
-  The signet leg (rc 4 today only on the empty-ms1 row) is the TX-V control.
+  The signet leg without --ms1 (rc 4 today only on ms1_decode) is the TX-V negative leg (see below).
 - `d_x1.txt` (nr8a_import_wallet_coin_type_flag): descriptor blob, mainnet $X at 84h/1h/0h;
   `import-wallet --format descriptor --blob d_x1.txt --json`; today rc 2 (NetworkMismatch).
 - `d_mixcoin.txt` (nr8a_import_wallet_coin_type_flag, I-5 leg): wsh(sortedmulti(1, xpub at 48h/0h/0h/2h,
@@ -23,3 +23,12 @@ Made with the toolkit built from master d72a18b1.
   cosigner tpubs of m_signet.txt (mk1 lines 8-9, 12-13) with version bytes swapped to 0488b21e (xpub),
   same key data. `restore $(mdargs m_signet.txt) --cosigner @0=<line1> --cosigner @1=<line2> --count 1`:
   today rc 0 "cross-checked"; after: SOFT only (keys agree with mainnet, md1 coin 1 disagrees with them).
+- `vb_mainnet_coin5.txt` (nr8a_verify_bundle_cause_line, TX-V positive leg, R1-I2): X5=`mnemonic convert
+  --from phrase=$P --to xpub --path m/84h/5h/0h --network mainnet`; `mnemonic bundle --network mainnet
+  --descriptor "wpkh([73c5da0a/84'/5'/0']$X5/<0;1>/*)"` stdout (watch-only, no ms1). Leg: `verify-bundle
+  --network mainnet --template bip84 --slot "@0.phrase=$P" --ms1 <ms1 of vb_signet_bip84.txt> --mk1 ..
+  --md1 ..`; today rc 4 with exactly mk1_xpub_match, mk1_path_match, md1_xpub_match, md1_origin_match
+  failing. Coin 5 is no source (B1) and the key is a mainnet xpub, so no source contradicts the run.
+- TX-V negative leg (R1-I2): `vb_signet_bip84.txt` with `--network signet` and no `--ms1`: today rc 4 with
+  only ms1_decode failing; after: no TX-V. The mainnet refusal leg of vb_signet_bip84.txt passes `--ms1`
+  too, so its today rows are only the four network rows.

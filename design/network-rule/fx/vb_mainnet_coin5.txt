@@ -1,0 +1,11 @@
+# ms1 (omitted — descriptor watch-only mode)
+
+# mk1 (xpub + origin)
+mk1qp9mpspqqsqjascfa3eutks2lcpafqyqsqygtqyqsqygpqyqsqyqfz9jreuv9sljvaeptz5r2w0wnq0dzsvdmrdcr8g458qcun8fys4l0djq
+mk1qp9mpsppk2wxn7uw06wsk4scw88r4hqzku6e9238krgw0wzsm27jfwh25sp9k87mqw7tmm9f08ynppn95yzz5guc2cazf7nxeqg2gg72y
+
+# md1 (wallet policy)
+md1ffrsppqpqpm6jwcgqpsq95peutks2z4qsemjzk9gx5u7axq769q64q6tq6g7gmxp
+md1ffrsppqf3hvdhqvazk4jn35lhrn7n594vxr3ecadcq4hxkf25fuv6e207wzxsqpx
+md1ffrsppqnp588hpgd40fyht42gqjmrlds809aaj5hnjfssej6zpqpxe25ze7k8jqk
+
