@@ -1,8 +1,8 @@
 //! T4 + T9 (SPEC_path_raw_bracketed_bare_unification.md §8) — origin-path
 //! rendering on `bundle --json` after the `ResolvedSlot.path_raw` deletion.
 //!
-//! - T4: the pathless `--slot @N.wif=` slot emits `origin_path: null` (the
-//!   default-path → `""` → `None` sentinel, formerly `path_raw.is_empty()`).
+//! - T4: the pathless `--slot @N.wif=` slot emitted `origin_path: null`; since
+//!   bug hunt 2026-11-25 X4 that input is refused at mint (see the test).
 //! - T9: descriptor/template-mode `--slot @N.path=<non-canonical>` is rendered
 //!   CANONICAL (`48h` → `48'`) in `bundle --json` `origin_path` (Amendment A3 —
 //!   the intentional wire-value change from deriving the origin from the typed
@@ -28,25 +28,30 @@ fn bundle_json(args: &[&str]) -> Value {
         .unwrap_or_else(|e| panic!("bundle JSON invalid: {e}\nstdout:\n{stdout}"))
 }
 
-// T4 — pathless WIF slot → origin_path: null (default-path sentinel).
+// T4 — retired by bug hunt 2026-11-25 X4: `bundle --template` now refuses a
+// `--slot @N.wif=` slot at mint (exit 1), so no pathless-WIF bundle JSON is
+// emitted any more. The refusal is pinned here so T4's input stays covered.
 #[test]
-fn bundle_wif_slot_origin_path_is_null() {
-    let v = bundle_json(&[
-        "bundle",
-        "--template",
-        "bip84",
-        "--network",
-        "mainnet",
-        "--slot",
-        &format!("@0.wif={SAMPLE_WIF}"),
-        "--json",
-        "--no-engraving-card",
-    ]);
-    assert!(
-        v["origin_path"].is_null(),
-        "pathless WIF slot must emit origin_path: null; got {:?}",
-        v["origin_path"]
-    );
+fn bundle_wif_slot_refused_at_mint() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args([
+            "bundle",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.wif={SAMPLE_WIF}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("@0.wif is refused"), "stderr: {stderr}");
 }
 
 // T9 — descriptor-mode non-canonical `--slot @N.path=48h/...` → canonical

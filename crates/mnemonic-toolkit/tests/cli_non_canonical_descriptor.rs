@@ -19,7 +19,7 @@ const BIP39_TEST_3: &str =
 /// invocation per the v0.19.0 cycle target.
 #[test]
 fn non_canonical_wsh_andor_default_path_inference_emits_bundle() {
-    let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+    let descriptor = "wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -41,14 +41,19 @@ fn non_canonical_wsh_andor_default_path_inference_emits_bundle() {
             &format!("@2.phrase={BIP39_TEST_3}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // SPEC §4.12.d byte-exact info notice on default-path emission.
+    // SPEC §4.12.d, Brian's ruling of 2026-11-26: the default-path warning
+    // (exit 4 above) and the command that states the path explicitly.
     assert!(
         stderr.contains(
-            "info: no origin supplied for @0,@1,@2; defaulting to m/48'/0'/0'/2' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
+            "warning: no origin was given for @0,@1,@2; the toolkit chose m/48'/0'/0'/2' (BIP-48 cosigner path) and the cards record it."
         ),
-        "stderr did not contain default-path info notice; got:\n{stderr}"
+        "stderr did not contain the default-path warning; got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("warning: to state this path explicitly, run:"),
+        "{stderr}"
     );
     // Bundle emitted; engraving card on stderr pins per-`@N` derivation
     // at the default path.
@@ -62,7 +67,7 @@ fn non_canonical_wsh_andor_default_path_inference_emits_bundle() {
 /// `m/48'/0'/5'/2'` in non-canonical mode.
 #[test]
 fn non_canonical_default_path_consumes_account_arg() {
-    let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
+    let descriptor = "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -80,7 +85,7 @@ fn non_canonical_default_path_consumes_account_arg() {
             &format!("@1.phrase={BIP39_TEST_2}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("m/48'/0'/5'/2'"),
@@ -91,7 +96,7 @@ fn non_canonical_default_path_consumes_account_arg() {
 /// SPEC §4.12.b — `--network testnet` uses BIP-44 coin-type 1.
 #[test]
 fn non_canonical_default_path_uses_testnet_coin_type() {
-    let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
+    let descriptor = "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -107,7 +112,7 @@ fn non_canonical_default_path_uses_testnet_coin_type() {
             &format!("@1.phrase={BIP39_TEST_2}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("m/48'/1'/0'/2'"),
@@ -121,7 +126,7 @@ fn non_canonical_default_path_uses_testnet_coin_type() {
 /// canonicity-gated. Byte-exact stderr match.
 #[test]
 fn canonical_wsh_sortedmulti_with_nonzero_account_refuses() {
-    let descriptor = "wsh(sortedmulti(2,@0,@1))";
+    let descriptor = "wsh(sortedmulti(2,@0/*,@1/*))";
     Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -145,11 +150,13 @@ fn canonical_wsh_sortedmulti_with_nonzero_account_refuses() {
         ));
 }
 
-/// SPEC §4.12.e — `tr(NUMS, <ms>)` sentinel substitution + default-path
-/// inference (tr() with TapTree is non-canonical per md-codec's table).
+/// SPEC §4.12.e — `tr(NUMS, <ms>)` sentinel substitution (tr() with TapTree
+/// is non-canonical per md-codec's table). A single-key script tree gets no
+/// default origin (tk-bh1125-tr-tree-bip87-scope, Brian's ruling 2026-11-26),
+/// so the origin is given with `--slot @0.path=`.
 #[test]
 fn tr_nums_sentinel_substitution_emits_bundle() {
-    let descriptor = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
+    let descriptor = "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -161,15 +168,15 @@ fn tr_nums_sentinel_substitution_emits_bundle() {
             "mainnet",
             "--slot",
             &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            "@0.path=m/87'/0'/0'",
         ])
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // H12 (cycle-1): a taproot (`tr(...)`) root tag defaults the BIP-48
-    // script-type leaf to 3' (P2TR), not 2' (P2WSH).
     assert!(
-        stderr.contains("info: no origin supplied for @0; defaulting to m/48'/0'/0'/3'"),
-        "stderr did not contain default-path info notice for tr(NUMS); got:\n{stderr}"
+        !stderr.contains("no origin supplied"),
+        "the origin was given; no default notice expected; got:\n{stderr}"
     );
 }
 
@@ -177,7 +184,7 @@ fn tr_nums_sentinel_substitution_emits_bundle() {
 /// the byte-exact friendly hint pointing to NUMS sentinel + `@N` form.
 #[test]
 fn bare_tr_no_internal_key_refuses_with_row_16_text() {
-    let descriptor = "tr(andor(pkh(@0),after(12000000),pk(@1)))";
+    let descriptor = "tr(andor(pkh(@0/*),after(12000000),pk(@1/*)))";
     Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -204,7 +211,7 @@ fn bare_tr_no_internal_key_refuses_with_row_16_text() {
 /// info notice is emitted in canonical mode.
 #[test]
 fn canonical_descriptor_does_not_emit_default_path_notice() {
-    let descriptor = "wsh(sortedmulti(2,@0,@1))";
+    let descriptor = "wsh(sortedmulti(2,@0/*,@1/*))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -220,7 +227,7 @@ fn canonical_descriptor_does_not_emit_default_path_notice() {
             &format!("@1.phrase={BIP39_TEST_2}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         !stderr.contains("info: non-canonical descriptor"),
@@ -236,7 +243,7 @@ fn canonical_descriptor_does_not_emit_default_path_notice() {
 /// canonicity-aware default-path inference in `descriptor_mode_verify_run`.
 #[test]
 fn non_canonical_default_path_self_check_round_trips() {
-    let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+    let descriptor = "wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))";
     Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -259,14 +266,15 @@ fn non_canonical_default_path_self_check_round_trips() {
             "--self-check",
         ])
         .assert()
-        .success();
+        .code(4);
 }
 
-/// Same round-trip test for `tr(NUMS, <ms>)` + bare-`@N` (default-path
-/// inference + NUMS substitution + tap-leaf walker round-trip).
+/// Same round-trip test for `tr(NUMS, <ms>)` (NUMS substitution + tap-leaf
+/// walker round-trip). The single-key tree takes an explicit origin
+/// (tk-bh1125-tr-tree-bip87-scope).
 #[test]
-fn tr_nums_default_path_self_check_round_trips() {
-    let descriptor = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
+fn tr_nums_explicit_path_self_check_round_trips() {
+    let descriptor = "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))";
     Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -278,6 +286,8 @@ fn tr_nums_default_path_self_check_round_trips() {
             "mainnet",
             "--slot",
             &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            "@0.path=m/87'/0'/0'",
             "--self-check",
         ])
         .assert()
@@ -290,7 +300,7 @@ fn tr_nums_default_path_self_check_round_trips() {
 /// accepts these structurally; the post-parse canonicity gate refuses.
 #[test]
 fn canonical_descriptor_refuses_phrase_plus_path_subkey_pair() {
-    let descriptor = "wsh(sortedmulti(2,@0,@1))";
+    let descriptor = "wsh(sortedmulti(2,@0/*,@1/*))";
     Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -345,7 +355,7 @@ fn canonical_descriptor_refuses_phrase_plus_path_subkey_pair() {
 #[test]
 fn verify_bundle_descriptor_slot_over_n_rejects_not_panics() {
     // n = 2 placeholders (@0, @1); @2 over-runs new_paths (len 2).
-    let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
+    let descriptor = "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))";
     Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -393,7 +403,7 @@ fn verify_bundle_descriptor_slot_over_n_rejects_not_panics() {
 /// mismatch). Assert the n/slot DescriptorParse message does NOT appear.
 #[test]
 fn verify_bundle_descriptor_exact_coverage_path_override_does_not_over_fire() {
-    let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
+    let descriptor = "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -471,7 +481,9 @@ fn parity_round_trips(descriptor: &str, slots: &[String]) -> (String, bool, usiz
         .arg("--allow-argv-secret")
         .args(&emit_args)
         .assert()
-        .success();
+        // 4 when an @N took a default origin (Brian's ruling of 2026-11-26),
+        // 0 when every origin was given.
+        .code(predicates::prelude::predicate::in_iter([0, 4]));
     let bundle: Value =
         serde_json::from_slice(&emit.get_output().stdout).expect("valid bundle JSON");
 
@@ -539,7 +551,7 @@ fn parity_round_trips(descriptor: &str, slots: &[String]) -> (String, bool, usiz
 #[test]
 fn parity_harness_self_test_wsh_n2_all_elided() {
     let (result, all_passed, n) = parity_round_trips(
-        "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+        "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))",
         &[
             format!("@0.phrase={TREZOR_12_ZERO}"),
             format!("@1.phrase={BIP39_TEST_2}"),
@@ -559,7 +571,7 @@ fn parity_wsh_all_shapes_round_trip() {
     let cases: Vec<(&str, Vec<String>)> = vec![
         // all-elided
         (
-            "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+            "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 format!("@1.phrase={BIP39_TEST_2}"),
@@ -567,7 +579,7 @@ fn parity_wsh_all_shapes_round_trip() {
         ),
         // shared-explicit (same path on both, correct per-slot fps)
         (
-            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk([b8688df1/48'/0'/0'/2']@1)))",
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0/*),after(12000000),pk([b8688df1/48'/0'/0'/2']@1/*)))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 format!("@1.phrase={BIP39_TEST_2}"),
@@ -575,7 +587,7 @@ fn parity_wsh_all_shapes_round_trip() {
         ),
         // divergent (different paths, correct per-slot fps)
         (
-            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk([b8688df1/48'/0'/7'/2']@1)))",
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0/*),after(12000000),pk([b8688df1/48'/0'/7'/2']@1/*)))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 format!("@1.phrase={BIP39_TEST_2}"),
@@ -583,7 +595,7 @@ fn parity_wsh_all_shapes_round_trip() {
         ),
         // slot-override (bare @0 + --slot @0.path= overrides the default)
         (
-            "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+            "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 "@0.path=m/48'/0'/9'/2'".into(),
@@ -592,7 +604,7 @@ fn parity_wsh_all_shapes_round_trip() {
         ),
         // mixed (@0 inline-correct-fp, @1 elided-defaulted)
         (
-            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk(@1)))",
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0/*),after(12000000),pk(@1/*)))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 format!("@1.phrase={BIP39_TEST_2}"),
@@ -624,7 +636,7 @@ fn parity_sh_wsh_round_trips() {
     for (desc, slots) in [
         // all-elided
         (
-            "sh(wsh(andor(pkh(@0),after(12000000),pk(@1))))",
+            "sh(wsh(andor(pkh(@0/*),after(12000000),pk(@1/*))))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 format!("@1.phrase={BIP39_TEST_2}"),
@@ -632,7 +644,7 @@ fn parity_sh_wsh_round_trips() {
         ),
         // shared-explicit (same path on both, correct per-slot fps; leaf 1')
         (
-            "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk([b8688df1/48'/0'/0'/1']@1))))",
+            "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0/*),after(12000000),pk([b8688df1/48'/0'/0'/1']@1/*))))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 format!("@1.phrase={BIP39_TEST_2}"),
@@ -640,7 +652,7 @@ fn parity_sh_wsh_round_trips() {
         ),
         // divergent (different accounts, correct per-slot fps)
         (
-            "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk([b8688df1/48'/0'/7'/1']@1))))",
+            "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0/*),after(12000000),pk([b8688df1/48'/0'/7'/1']@1/*))))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 format!("@1.phrase={BIP39_TEST_2}"),
@@ -648,7 +660,7 @@ fn parity_sh_wsh_round_trips() {
         ),
         // slot-override (bare @0 + --slot @0.path= overrides the default)
         (
-            "sh(wsh(andor(pkh(@0),after(12000000),pk(@1))))",
+            "sh(wsh(andor(pkh(@0/*),after(12000000),pk(@1/*))))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 "@0.path=m/48'/0'/4'/1'".into(),
@@ -657,7 +669,7 @@ fn parity_sh_wsh_round_trips() {
         ),
         // mixed (@0 inline-correct-fp, @1 elided-defaulted)
         (
-            "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk(@1))))",
+            "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0/*),after(12000000),pk(@1/*))))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 format!("@1.phrase={BIP39_TEST_2}"),
@@ -673,18 +685,23 @@ fn parity_sh_wsh_round_trips() {
     }
 }
 
-/// PARITY (tr(NUMS), leaf 3', n=1) — H12 selects the taproot BIP-48 leaf `3'`.
-/// all-elided + slot-override. The n=1 bundle mk1 is FLAT (the harness handles
-/// it), so this also exercises the flat-mk1 arm of `parity_round_trips`.
+/// PARITY (tr(NUMS), n=1), slot-override only: a single-key script tree gets
+/// no default origin (tk-bh1125-tr-tree-bip87-scope, Brian's ruling
+/// 2026-11-26), so there is no all-elided cell. The n=1 bundle mk1 is FLAT
+/// (the harness handles it), so this also exercises the flat-mk1 arm of
+/// `parity_round_trips`.
 #[test]
 fn parity_tr_nums_round_trips() {
     for (desc, slots) in [
         (
-            "tr(NUMS,and_v(v:pk(@0),after(12000000)))",
-            vec![format!("@0.phrase={TREZOR_12_ZERO}")],
+            "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                "@0.path=m/87'/0'/0'".into(),
+            ],
         ),
         (
-            "tr(NUMS,and_v(v:pk(@0),after(12000000)))",
+            "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 "@0.path=m/48'/0'/3'/3'".into(),
@@ -718,7 +735,7 @@ fn bundle_retains_row19_inline_vs_slot_path_mismatch_refusal() {
             "bundle",
             "--descriptor",
             // @0 inline path is .../0'/2'; --slot below says .../9'/2' → mismatch.
-            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk(@1)))",
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0/*),after(12000000),pk(@1/*)))",
             "--network",
             "mainnet",
             "--slot",
@@ -749,7 +766,7 @@ fn verify_bundle_does_not_acquire_row19_refusal() {
         .args([
             "verify-bundle",
             "--descriptor",
-            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk(@1)))",
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0/*),after(12000000),pk(@1/*)))",
             "--network",
             "mainnet",
             "--slot",
@@ -795,7 +812,7 @@ fn verify_bundle_emits_the_default_path_notice_like_bundle_does() {
         .args([
             "verify-bundle",
             "--descriptor",
-            "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+            "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))",
             "--network",
             "mainnet",
             "--slot",
@@ -832,7 +849,7 @@ fn over_n_slot_vec_on_parse_failing_descriptor_still_refuses() {
         .args([
             "bundle",
             "--descriptor",
-            "wsh(@0)",
+            "wsh(@0/*)",
             "--network",
             "mainnet",
             "--slot",
@@ -855,12 +872,12 @@ fn over_n_slot_vec_on_parse_failing_descriptor_still_refuses() {
 #[test]
 fn parity_inline_origin_fixtures_are_non_canonical() {
     for desc in [
-        "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk([b8688df1/48'/0'/0'/2']@1)))",
-        "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk([b8688df1/48'/0'/7'/2']@1)))",
-        "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk(@1)))",
-        "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk([b8688df1/48'/0'/0'/1']@1))))",
-        "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk([b8688df1/48'/0'/7'/1']@1))))",
-        "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk(@1))))",
+        "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0/*),after(12000000),pk([b8688df1/48'/0'/0'/2']@1/*)))",
+        "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0/*),after(12000000),pk([b8688df1/48'/0'/7'/2']@1/*)))",
+        "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0/*),after(12000000),pk(@1/*)))",
+        "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0/*),after(12000000),pk([b8688df1/48'/0'/0'/1']@1/*))))",
+        "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0/*),after(12000000),pk([b8688df1/48'/0'/7'/1']@1/*))))",
+        "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0/*),after(12000000),pk(@1/*))))",
     ] {
         let out = Command::cargo_bin("mnemonic")
             .unwrap()

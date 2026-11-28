@@ -120,6 +120,7 @@ devices:
      --network mainnet \
      --template wsh-sortedmulti \
      --threshold K \
+     --multisig-path-family bip87 \
      --slot @0.xpub=<xpub from cosigner 0> \
      --slot @1.xpub=<xpub from cosigner 1> \
      --slot @2.xpub=<xpub from cosigner 2>

@@ -66,7 +66,7 @@ fn threshold_with_multisig_template_accepted() {
             "--no-engraving-card",
         ])
         .assert()
-        .success();
+        .code(4);
 }
 
 #[test]
@@ -174,5 +174,5 @@ fn descriptor_without_template_accepted() {
             "--no-engraving-card",
         ])
         .assert()
-        .success();
+        .code(4);
 }

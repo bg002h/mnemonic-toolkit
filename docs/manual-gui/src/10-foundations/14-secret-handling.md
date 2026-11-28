@@ -294,7 +294,16 @@ ones included, because those names belong to the GUI's own channels.
 - **Copy command.** The copied text never contains a secret value and
   never contains `--allow-argv-secret`. It is built from the Linux
   plan on **every** OS, with one comment line per secret telling you
-  how to supply it in your shell:
+  how to supply it in your shell. It starts with one more comment
+  line naming the CLI version it needs (`REM` instead of `#` in the
+  Windows copy), because an older CLI can read a reference as the
+  secret itself:
+
+  ```text
+  # Needs mnemonic <pinned version> or newer: an older mnemonic can take an @env:/stdin reference below literally as the secret.
+  ```
+
+  and then:
 
   ```text
   # --from phrase=: IFS= read -rs MNEMONIC_GUI_S0; export MNEMONIC_GUI_S0   (fish: read -s -x --delimiter \n MNEMONIC_GUI_S0)

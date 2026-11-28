@@ -180,6 +180,8 @@ fn export_descriptor_multisig_wsh_sortedmulti_not_refused() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
+            // Bug hunt 2026-11-25 toolkit#5: a defaulted origin that contradicts
+            // the xpub's header is refused, so the fixture states each key's real origin.
             "export-wallet",
             "--network",
             "mainnet",
@@ -190,7 +192,11 @@ fn export_descriptor_multisig_wsh_sortedmulti_not_refused() {
             "--slot",
             &format!("@0.xpub={COSIGNER_A_XPUB}"),
             "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
             &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
             "--format",
             "descriptor",
         ])

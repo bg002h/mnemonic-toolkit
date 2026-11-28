@@ -81,8 +81,13 @@ surfaced.
 ## `--parity-words` {#mnemonic-word-card-parity-words}
 
 Number field. The Reed–Solomon parity-word budget `m` appended to each
-card: it corrects `⌊m/2⌋` word substitutions or fills `m` erasures.
-Default `0` (error **detection** only, no repair). Mutually exclusive with
+card. Default `0` (error **detection** only, no repair). Repair works on
+whole checkpoint blocks of about √K data words: one mis-stamped data word
+costs its whole block, a mis-stamped checkpoint word its block plus one (plus
+two when only its CRC field changed), and a mis-stamped parity word costs 2;
+the card repairs while the total stays within `m`. The header words cannot be
+repaired. To survive one mis-stamped word anywhere outside the header, `m`
+must be at least the block size plus 2 (for a 2-chunk `mk1` card, `10`). Mutually exclusive with
 [`--parity-pct`](#mnemonic-word-card-parity-pct).
 
 ## `--parity-pct` {#mnemonic-word-card-parity-pct}
@@ -115,7 +120,7 @@ integrity tag.
    The field is a plain text row — `mk1` is public, so it is **not**
    masked.
 3. Leave `--decode` unchecked (encode is the default direction).
-4. Optionally set `--parity-words` (say `4`) for substitution repair, and
+4. Optionally set `--parity-words` (say `10`) for substitution repair, and
    leave `--raid` at `0` for a single solo card.
 5. Click **Run**. Because no field is secret-bearing, **no run-confirm
    modal appears** — the subprocess spawns directly.

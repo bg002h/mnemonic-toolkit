@@ -281,22 +281,121 @@ impl CliTemplate {
     }
 }
 
-/// BIP-48 default-origin script-type component for a descriptor whose root
-/// md-codec [`Tag`] is known but whose `--template` is not (the descriptor-mode
-/// default-origin inference path — H12). Maps the root tag to a representative
-/// multisig [`CliTemplate`] and reuses [`CliTemplate::bip48_script_type`] as the
-/// single 1/2/3 mapping authority:
-///   `Tag::Tr` → `3'` (P2TR; a de-facto interop convention adopted by
-///   Sparrow/Coldcard/Jade and what template-mode already emits),
-///   `Tag::Sh` (sh(wsh)) → `1'`, everything else (wsh / indeterminate) → `2'`.
-/// The `2'` default preserves the pre-H12 behavior for the wsh case.
-pub fn bip48_script_type_for_root_tag(tag: &Tag) -> u32 {
-    let representative = match tag {
-        Tag::Tr => CliTemplate::TrSortedMultiA,
-        Tag::Sh => CliTemplate::ShWshSortedMulti,
-        _ => CliTemplate::WshSortedMulti,
-    };
-    representative.bip48_script_type().unwrap_or(2)
+/// Default origin for an `@N` that a NON-canonical descriptor leaves without
+/// one (`bundle --descriptor`, `verify-bundle --descriptor`, `xpub-search`).
+/// Brian's ruling of 2026-11-25 (BIP defaults): BIP-48 only where BIP-48
+/// names the script type, BIP-87 for everything else.
+///
+/// - BIP-48 (§Script): "Currently the only script types covered by this BIP
+///   are Native Segwit (p2wsh) and Nested Segwit (p2sh-p2wsh)", with
+///   "`1'`: Nested Segwit (p2sh-p2wsh)" and "`2'`: Native Segwit (p2wsh)".
+///   So `sh(wsh(...))` takes `m/48'/c'/a'/1'` and `wsh(...)` `m/48'/c'/a'/2'`.
+/// - BIP-87 (Backwards Compatibility): "Any script that is supported by
+///   descriptors (and the specific wallet implementation) is compatible with
+///   this BIP." Path `m/87'/c'/a'`, with "Coin type `0` for mainnet and `1`
+///   for testnets (testnet, regtest, and signet)". It covers what BIP-48 does
+///   not: legacy bare P2SH (`sh(multi)`, `sh(sortedmulti)`, other `sh(...)`
+///   that is not `sh(wsh)`) and taproot multisig. BIP-48 defines no `3'`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultOriginFamily {
+    /// `m/48'/<coin>'/<account>'/<script_type>'`.
+    Bip48 { script_type: u32 },
+    /// `m/87'/<coin>'/<account>'`.
+    Bip87,
+}
+
+impl DefaultOriginFamily {
+    /// The family for an md-codec descriptor tree (root tag and, for `sh`, its
+    /// single child).
+    pub fn for_md_tree(tree: &Node) -> Self {
+        match (&tree.tag, &tree.body) {
+            (Tag::Sh, Body::Children(c)) if c.len() == 1 && c[0].tag == Tag::Wsh => {
+                Self::Bip48 { script_type: 1 }
+            }
+            (Tag::Sh, _) | (Tag::Tr, _) => Self::Bip87,
+            _ => Self::Bip48 { script_type: 2 },
+        }
+    }
+
+    /// The default origin as an md-codec [`OriginPath`].
+    pub fn origin_path(&self, network: CliNetwork, account: u32) -> OriginPath {
+        let h = |value: u32| PathComponent {
+            hardened: true,
+            value,
+        };
+        let components = match self {
+            Self::Bip48 { script_type } => {
+                vec![h(48), h(network.coin_type()), h(account), h(*script_type)]
+            }
+            Self::Bip87 => vec![h(87), h(network.coin_type()), h(account)],
+        };
+        OriginPath { components }
+    }
+
+    /// The default origin as `m/...`.
+    pub fn path_string(&self, network: CliNetwork, account: u32) -> String {
+        match self {
+            Self::Bip48 { script_type } => {
+                MultisigPathFamily::Bip48.default_origin_path(network, account, *script_type)
+            }
+            Self::Bip87 => MultisigPathFamily::Bip87.default_origin_path(network, account, 0),
+        }
+    }
+
+    /// The default origin as a [`DerivationPath`].
+    pub fn derivation_path(&self, network: CliNetwork, account: u32) -> DerivationPath {
+        DerivationPath::from_str(&self.path_string(network, account))
+            .expect("default origin paths are well-formed")
+    }
+
+    /// Short name for notices.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Bip48 { .. } => "BIP-48 cosigner path",
+            Self::Bip87 => "BIP-87",
+        }
+    }
+}
+
+/// Whether `tree` references two or more distinct keys (distinct `@N`
+/// placeholders: a key slot, a multi-family index list or a taproot internal
+/// key; the NUMS point and Liana's derived unspendable key are not keys).
+///
+/// This is the toolkit's test for "multisig" when it chooses a default origin.
+/// The BIP-87 default (Brian's ruling of 2026-11-26,
+/// `tk-bh1125-tr-tree-bip87-scope`; BIP-87: "it is best to restrict this
+/// script-agnostic hierarchy to multisignature wallets only") and the BIP-48
+/// default (`tk-bh1125-rr1-m3-bip48-thresh-scope`) apply only to such trees.
+/// Brian, 2026-11-26 17:27Z: the fragments do not decide it, the keys do:
+/// `thresh(2,pk(A),pk(B),after(..))` and `tr(NUMS,{pk(A),pk(B)})` are
+/// multisig, `thresh(1,pk(A),after(..),older(..))` is not.
+pub fn tree_has_multiple_keys(tree: &Node) -> bool {
+    let mut keys = std::collections::BTreeSet::new();
+    collect_key_indices(tree, &mut keys);
+    keys.len() >= 2
+}
+
+fn collect_key_indices(tree: &Node, keys: &mut std::collections::BTreeSet<u8>) {
+    match &tree.body {
+        Body::KeyArg { index } => {
+            keys.insert(*index);
+        }
+        Body::MultiKeys { indices, .. } => keys.extend(indices.iter().copied()),
+        Body::Children(c) | Body::Variable { children: c, .. } => {
+            for child in c {
+                collect_key_indices(child, keys);
+            }
+        }
+        Body::Tr { internal_key, tree } => {
+            if let md_codec::tree::InternalKey::Slot(i) = internal_key {
+                keys.insert(*i);
+            }
+            if let Some(t) = tree {
+                collect_key_indices(t, keys);
+            }
+        }
+        Body::Hash256Body(_) | Body::Hash160Body(_) | Body::Timelock(_) | Body::Empty => {}
+    }
 }
 
 #[cfg(test)]
@@ -704,5 +803,129 @@ mod tests {
             "internal key must be the NUMS H-point; got: {s}"
         );
         assert!(s.contains("multi_a("), "leaf must be multi_a; got: {s}");
+    }
+
+    // Review rulings2-r1 N-2: `tree_has_multiple_keys` counts DISTINCT `@N`
+    // across every body that carries keys.
+    mod tree_has_multiple_keys {
+        use super::super::tree_has_multiple_keys;
+        use md_codec::tag::Tag;
+        use md_codec::tree::{Body, InternalKey, Node};
+
+        fn pk(i: u8) -> Node {
+            Node {
+                tag: Tag::PkK,
+                body: Body::KeyArg { index: i },
+            }
+        }
+        fn node(tag: Tag, children: Vec<Node>) -> Node {
+            Node {
+                tag,
+                body: Body::Children(children),
+            }
+        }
+        fn multi(tag: Tag, k: u8, indices: Vec<u8>) -> Node {
+            Node {
+                tag,
+                body: Body::MultiKeys { k, indices },
+            }
+        }
+        fn tr(internal_key: InternalKey, tree: Option<Node>) -> Node {
+            Node {
+                tag: Tag::Tr,
+                body: Body::Tr {
+                    internal_key,
+                    tree: tree.map(Box::new),
+                },
+            }
+        }
+        fn older() -> Node {
+            Node {
+                tag: Tag::Older,
+                body: Body::Timelock(144),
+            }
+        }
+
+        #[test]
+        fn repeated_index_counts_once() {
+            let t = node(
+                Tag::Wsh,
+                vec![node(
+                    Tag::OrD,
+                    vec![pk(0), node(Tag::AndV, vec![pk(0), older()])],
+                )],
+            );
+            assert!(!tree_has_multiple_keys(&t));
+            let t = node(
+                Tag::Wsh,
+                vec![node(
+                    Tag::OrD,
+                    vec![pk(0), node(Tag::AndV, vec![pk(1), older()])],
+                )],
+            );
+            assert!(tree_has_multiple_keys(&t));
+        }
+
+        #[test]
+        fn multi_lists_count_distinct_indices() {
+            for tag in [Tag::Multi, Tag::SortedMulti, Tag::MultiA, Tag::SortedMultiA] {
+                assert!(!tree_has_multiple_keys(&node(
+                    Tag::Wsh,
+                    vec![multi(tag, 1, vec![0])]
+                )));
+                assert!(!tree_has_multiple_keys(&node(
+                    Tag::Wsh,
+                    vec![multi(tag, 1, vec![0, 0])]
+                )));
+                assert!(tree_has_multiple_keys(&node(
+                    Tag::Wsh,
+                    vec![multi(tag, 1, vec![0, 1])]
+                )));
+            }
+        }
+
+        #[test]
+        fn unspendable_internal_keys_are_not_keys() {
+            for ik in [InternalKey::NumsPoint, InternalKey::LianaUnspendable] {
+                assert!(!tree_has_multiple_keys(&tr(ik, Some(pk(0)))));
+                assert!(!tree_has_multiple_keys(&tr(
+                    ik,
+                    Some(multi(Tag::MultiA, 1, vec![0]))
+                )));
+                assert!(tree_has_multiple_keys(&tr(
+                    ik,
+                    Some(node(Tag::TapTree, vec![pk(0), pk(1)]))
+                )));
+            }
+        }
+
+        #[test]
+        fn slot_internal_key_counts_and_a_same_index_leaf_does_not_add() {
+            assert!(!tree_has_multiple_keys(&tr(InternalKey::Slot(0), None)));
+            assert!(!tree_has_multiple_keys(&tr(
+                InternalKey::Slot(0),
+                Some(pk(0))
+            )));
+            assert!(tree_has_multiple_keys(&tr(
+                InternalKey::Slot(0),
+                Some(pk(1))
+            )));
+        }
+
+        #[test]
+        fn thresh_counts_keys_not_fragments() {
+            let thresh = |k: u8, children: Vec<Node>| Node {
+                tag: Tag::Thresh,
+                body: Body::Variable { k, children },
+            };
+            assert!(!tree_has_multiple_keys(&node(
+                Tag::Wsh,
+                vec![thresh(2, vec![pk(0), older(), older()])]
+            )));
+            assert!(tree_has_multiple_keys(&node(
+                Tag::Wsh,
+                vec![thresh(1, vec![pk(0), pk(1)])]
+            )));
+        }
     }
 }

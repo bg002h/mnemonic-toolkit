@@ -62,7 +62,7 @@ pub struct VerifyBundleArgs {
 
     /// BIP-32 account index (default 0). Non-zero values produce md1 with
     /// PathDeclPaths::Divergent per SPEC §4.2.
-    #[arg(long, default_value = "0")]
+    #[arg(long, default_value = "0", value_parser = crate::parse::parse_account_arg)]
     pub account: u32,
 
     /// #28 phase 1 — explicit origin derivation path for verifying + recomposing
@@ -1661,17 +1661,15 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // emit path calls), so the two sides cannot drift. `Verify` mode SKIPS the
     // emit-only §6.6 row-19 path-mismatch refusal (verify is read-only — a
     // genuine inline/slot conflict surfaces downstream as a md1 byte-mismatch,
-    // never as a refusal, preserving verify's accept-set). The returned
-    // `defaulted_indices` is discarded: verify-bundle emits no notice, and the
-    // sole consumed output (`path_decl.paths`) is byte-identical to the prior
-    // hand-copied block (only the discarded bookkeeping differs).
-    let defaulted = crate::cmd::bundle::bind_descriptor_mode_paths(
+    // never as a refusal, preserving verify's accept-set). The slots it
+    // filled are reported below as an advisory.
+    let bound_paths = crate::cmd::bundle::bind_descriptor_mode_paths(
         crate::cmd::bundle::DescriptorBindMode::Verify,
         &args.slot,
         &mut descriptor_resolved.path_decl,
         n,
         is_non_canonical,
-        &canonicity_probe.tree.tag,
+        &canonicity_probe.tree,
         args.network,
         args.account,
     )?;
@@ -1683,17 +1681,37 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // `verify-bundle` never learns an origin was assumed on their behalf.
     // Advisory on stderr, like the emit side; no check row and no exit code
     // moves.
-    if !defaulted.is_empty() {
-        let idx_list = defaulted
+    let defaulted = &bound_paths.defaulted;
+    if !bound_paths.canonical_filled.is_empty() {
+        let idx_list = bound_paths
+            .canonical_filled
             .iter()
             .map(|i| format!("@{i}"))
             .collect::<Vec<_>>()
             .join(", ");
         let _ = writeln!(
             stderr,
-            "info: no origin supplied for {idx_list}; assuming the BIP-48 \
-             cosigner path to rebuild the expected card. If that is not where \
-             those keys live, set it with [fp/path]@N or --slot @N.path=m/..."
+            "info: no origin path supplied for {idx_list}; assuming this descriptor shape's \
+             canonical origin to rebuild the expected card. If that is not where those \
+             keys live, set it with [fp/path]@N or --slot @N.path=m/..."
+        );
+    }
+    if !defaulted.is_empty() {
+        let idx_list = defaulted
+            .iter()
+            .map(|i| format!("@{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        // Name the path actually assumed (Brian's BIP-defaults ruling,
+        // 2026-11-25: BIP-48 1'/2' for sh(wsh)/wsh, BIP-87 otherwise).
+        let family = crate::template::DefaultOriginFamily::for_md_tree(&canonicity_probe.tree);
+        let path = family.path_string(args.network, args.account);
+        let label = family.label();
+        let _ = writeln!(
+            stderr,
+            "info: no origin supplied for {idx_list}; assuming {path} ({label}) \
+             to rebuild the expected card. If that is not where those keys \
+             live, set it with [fp/path]@N or --slot @N.path=m/..."
         );
     }
 
@@ -1829,7 +1847,17 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 Some(p) => bitcoin::bip32::DerivationPath::from_str(&p.value).map_err(|e| {
                     ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
                 })?,
-                None => anno_path.clone(),
+                None => {
+                    // Review r2 I-B (mirrors bundle): an assumed origin (the
+                    // shape's canonical one or the non-canonical default) is
+                    // used for a foreign xpub only when its header agrees.
+                    if bound_paths.canonical_filled.contains(&idx)
+                        || bound_paths.defaulted.contains(&idx)
+                    {
+                        crate::cmd::bundle::check_defaulted_xpub_origin(idx, &xpub, &anno_path)?;
+                    }
+                    anno_path.clone()
+                }
             };
             (xpub, fp, path, None, None)
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Entropy) {

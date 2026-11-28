@@ -283,7 +283,7 @@ pub struct ConvertArgs {
     /// BIP-32 account index (default 0). Used to compute the
     /// template-derived path when `--path` is omitted. Refused (non-zero)
     /// together with --path, or where no requested target uses it.
-    #[arg(long, default_value = "0")]
+    #[arg(long, default_value = "0", value_parser = crate::parse::parse_account_arg)]
     pub account: u32,
 
     /// Master-key fingerprint (8 lowercase hex chars). Used by output

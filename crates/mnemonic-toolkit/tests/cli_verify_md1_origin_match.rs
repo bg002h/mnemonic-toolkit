@@ -42,7 +42,7 @@ fn emit(p0: &str, p1: &str, out: &std::path::Path) {
         "--network".into(),
         "mainnet".into(),
         "--descriptor".into(),
-        "wsh(sortedmulti(2,@0,@1))".into(),
+        "wsh(sortedmulti(2,@0/*,@1/*))".into(),
     ];
     args.extend(slots(p0, p1));
     args.push("--json".into());
@@ -62,7 +62,7 @@ fn verify(p0: &str, p1: &str, card: &std::path::Path) -> String {
         "--network".into(),
         "mainnet".into(),
         "--descriptor".into(),
-        "wsh(sortedmulti(2,@0,@1))".into(),
+        "wsh(sortedmulti(2,@0/*,@1/*))".into(),
     ];
     args.extend(slots(p0, p1));
     args.push("--bundle-json".into());

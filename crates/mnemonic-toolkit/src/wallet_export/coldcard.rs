@@ -197,8 +197,9 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
         _ => unreachable!(),
     };
 
-    // bipNN.deriv: m/<purpose>'/<coin>'/<account>'.
-    let deriv = template.origin_path_str(inputs.network, inputs.account);
+    // bipNN.deriv: the slot's own origin path (normally
+    // m/<purpose>'/<coin>'/<account>'), never the template default (review r1 I3).
+    let deriv = slot.origin_path_m();
 
     let sub = ColdcardSubDerivation {
         name: sub_object_name,
@@ -250,6 +251,11 @@ fn sub_clone<'a>(s: &ColdcardSubDerivation<'a>) -> ColdcardSubDerivation<'a> {
         _marker: std::marker::PhantomData,
     }
 }
+
+/// The start of the empty-origin refusal of [`emit_coldcard_multisig_text`],
+/// so a caller with other advice (restore has no `--slot`) can recognise it.
+pub(crate) const EMPTY_ORIGIN_REFUSAL_PREFIX: &str =
+    "--format coldcard multisig text: at least one cosigner has an empty origin";
 
 /// SPEC v0.8 §5.2 — Coldcard multisig text emitter. Format reference:
 /// <https://coldcard.com/docs/multisig>. Jade's `register_multisig.multisig_file`
@@ -342,14 +348,12 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
         .iter()
         .any(|s| normalize_path(&s.origin_path_bare()).is_empty())
     {
-        return Err(ToolkitError::BadInput(
-            "--format coldcard multisig text: at least one cosigner has an empty origin \
-             derivation path — a faithful per-cosigner export is not possible. Supply each \
-             cosigner's origin path (`--slot @N.path=m/...`) so the exported `Derivation:` \
-             line is correct; the toolkit refuses to substitute a placeholder origin into a \
-             multisig wallet file."
-                .to_string(),
-        ));
+        return Err(ToolkitError::BadInput(format!(
+            "{EMPTY_ORIGIN_REFUSAL_PREFIX} derivation path — a faithful per-cosigner export is \
+             not possible. Supply each cosigner's origin path (`--slot @N.path=m/...`) so the \
+             exported `Derivation:` line is correct; the toolkit refuses to substitute a \
+             placeholder origin into a multisig wallet file."
+        )));
     }
 
     // cycle-13a H11-a/b/c: emit a single shared `Derivation:` line when ALL

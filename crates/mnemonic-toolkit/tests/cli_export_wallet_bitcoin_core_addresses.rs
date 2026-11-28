@@ -630,9 +630,13 @@ fn the_template_arm_reaches_this_format_too() {
         "--slot",
         "@0.fingerprint=b8688df1",
         "--slot",
+        "@0.path=m/48'/0'/0'/2'", // header: BIP-48 key (bug hunt toolkit#5)
+        "--slot",
         "@1.xpub=xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6",
         "--slot",
         "@1.fingerprint=28645006",
+        "--slot",
+        "@1.path=m/48'/0'/0'/2'", // header: BIP-48 key (bug hunt toolkit#5)
         "--threshold",
         "2",
         "--format",

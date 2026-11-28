@@ -40,7 +40,7 @@ fn bundle_multisig(template: &str, network: &str) -> (Vec<String>, Vec<Vec<Strin
             "--no-engraving-card",
         ])
         .assert()
-        .success();
+        .code(4);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).expect("bundle JSON");
     let md1: Vec<String> = v["md1"]
         .as_array()

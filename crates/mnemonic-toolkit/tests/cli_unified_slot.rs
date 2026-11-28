@@ -143,139 +143,80 @@ fn unified_slot_xprv_rejected_with_followup_pointer() {
     );
 }
 
-#[test]
-fn unified_slot_wif_singlesig_emits_valid_bundle() {
-    // K.3: wif degenerate single-key in single-sig context.
-    let out = Command::cargo_bin("mnemonic")
-        .unwrap()
-        .arg("--allow-argv-secret")
-        .args([
-            "bundle",
-            "--template",
-            "bip84",
-            "--network",
-            "mainnet",
-            "--slot",
-            &format!("@0.wif={}", SAMPLE_WIF),
-            "--json",
-            "--no-engraving-card",
-        ])
-        .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
-    assert_eq!(v["schema_version"], "4");
-    // wif slot emits empty-string ms1 sentinel (v0.4.2 documented behavior).
-    assert_eq!(v["ms1"], serde_json::json!([""]));
-    assert!(v["mk1"].is_array());
-}
-
-// v0.4.3 Phase R: wif slots in multisig contexts are now SUPPORTED
-// (previously rejected with v0.4.3 deferral pointer in v0.4.2).
-// The v0.4.2 rejection test is replaced by 3 R tests below.
-
-// Two distinct WIFs (Bitcoin Core compressed-pubkey test vector + a flipped
-// variant). Same 32-byte private-key test vector both times would produce
-// the same xpub, hence we use two genuinely-distinct WIFs to avoid
-// triggering BIP-388 row 13.
+// Bug hunt 2026-11-25 X4: `bundle --template` REFUSES every `--slot @N.wif=`
+// at mint (exit 1). A WIF is one private key with no chain code, but every
+// template derives ranged child addresses (`/<0;1>/*`); the WIF slot used to be
+// bound as a depth-0 "xpub" with a zero chain code, so the card's addresses
+// were not the WIF's address. These were the v0.4.2 / Phase R success cases
+// (single-sig; hybrid 2-of-3; pure-WIF 2-of-2; same WIF twice); each now
+// refuses before any card is emitted. Existing WIF cards still decode
+// (`cli_argv_leakage::existing_wif_mk1_card_still_decodes_via_inspect`).
 const SAMPLE_WIF_2: &str = "L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1";
 
 #[test]
-fn unified_slot_wif_in_multisig_2_of_3() {
-    // Phase R: hybrid 2-of-3 with phrase + wif + xpub cosigners.
+fn unified_slot_wif_refused_in_every_template_context() {
     let xpub = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
-    let out = Command::cargo_bin("mnemonic")
-        .unwrap()
-        .arg("--allow-argv-secret")
-        .args([
-            "bundle",
-            "--template",
-            "wsh-sortedmulti",
-            "--threshold",
-            "2",
-            "--network",
-            "mainnet",
-            "--slot",
-            &format!("@0.phrase={}", TREZOR_24),
-            "--slot",
-            &format!("@1.wif={}", SAMPLE_WIF),
-            "--slot",
-            &format!("@2.xpub={}", xpub),
-            "--json",
-            "--no-engraving-card",
-        ])
-        .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
-    assert_eq!(v["schema_version"], "4");
-    // ms1: [secret, "", ""] — only @0 is secret-bearing.
-    assert!(v["ms1"][0].as_str().unwrap().starts_with("ms1"));
-    assert_eq!(v["ms1"][1], "");
-    assert_eq!(v["ms1"][2], "");
-}
-
-#[test]
-fn unified_slot_wif_alone_in_2_of_2() {
-    // Phase R: pure wif multisig (degenerate but legal). Two DISTINCT WIFs.
-    let out = Command::cargo_bin("mnemonic")
-        .unwrap()
-        .arg("--allow-argv-secret")
-        .args([
-            "bundle",
-            "--template",
-            "wsh-sortedmulti",
-            "--threshold",
-            "2",
-            "--network",
-            "mainnet",
-            "--slot",
-            &format!("@0.wif={}", SAMPLE_WIF),
-            "--slot",
-            &format!("@1.wif={}", SAMPLE_WIF_2),
-            "--json",
-            "--no-engraving-card",
-        ])
-        .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
-    assert_eq!(v["schema_version"], "4");
-    // Both wif slots are watch-only at the ms1 level (empty sentinels).
-    assert_eq!(v["ms1"], serde_json::json!(["", ""]));
-}
-
-#[test]
-fn unified_slot_same_wif_twice_emits_bip388_row13() {
-    // Phase R: BIP-388 distinct-key conformance under wif multisig. Same
-    // WIF supplied for @0 AND @1 → identical pubkey + empty path tuples
-    // → SPEC §6.6 row 13 fires (exit 2).
-    let out = Command::cargo_bin("mnemonic")
-        .unwrap()
-        .arg("--allow-argv-secret")
-        .args([
-            "bundle",
-            "--template",
-            "wsh-sortedmulti",
-            "--threshold",
-            "2",
-            "--network",
-            "mainnet",
-            "--slot",
-            &format!("@0.wif={}", SAMPLE_WIF),
-            "--slot",
-            &format!("@1.wif={}", SAMPLE_WIF),
-        ])
-        .assert()
-        .failure()
-        .code(2);
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.ends_with(        "error: BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)\n"),
-        "{}; got {:?}",
-        "same WIF twice in multisig must trigger SPEC §6.6 row 13 byte-exactly",
-        stderr,
-    )
+    let single = vec![
+        "--template".to_string(),
+        "bip84".into(),
+        "--slot".into(),
+        format!("@0.wif={SAMPLE_WIF}"),
+    ];
+    let hybrid = vec![
+        "--template".to_string(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--slot".into(),
+        format!("@0.phrase={TREZOR_24}"),
+        "--slot".into(),
+        format!("@1.wif={SAMPLE_WIF}"),
+        "--slot".into(),
+        format!("@2.xpub={xpub}"),
+    ];
+    let pure = vec![
+        "--template".to_string(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--slot".into(),
+        format!("@0.wif={SAMPLE_WIF}"),
+        "--slot".into(),
+        format!("@1.wif={SAMPLE_WIF_2}"),
+    ];
+    let twice = vec![
+        "--template".to_string(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--slot".into(),
+        format!("@0.wif={SAMPLE_WIF}"),
+        "--slot".into(),
+        format!("@1.wif={SAMPLE_WIF}"),
+    ];
+    for (name, case, wif_idx) in [
+        ("single", single, 0),
+        ("hybrid", hybrid, 1),
+        ("pure", pure, 0),
+        ("twice", twice, 0),
+    ] {
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .arg("bundle")
+            .args(&case)
+            .args(["--network", "mainnet", "--json", "--no-engraving-card"])
+            .assert()
+            .failure()
+            .code(1);
+        let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+        assert!(stdout.is_empty(), "{name}: no card on stdout; got {stdout}");
+        assert!(
+            stderr.contains(&format!("@{wif_idx}.wif is refused")),
+            "{name}: stderr: {stderr}"
+        );
+    }
 }
 
 #[test]
@@ -381,7 +322,7 @@ fn unified_slot_descriptor_watch_only_xpub_via_slot() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
     assert_eq!(v["mode"], "watch-only");

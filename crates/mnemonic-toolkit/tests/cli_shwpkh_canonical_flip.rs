@@ -42,7 +42,11 @@ const SEED_MASTER_XPUB: &str = "xpub661MyMwAqRbcFkPHucMnrGNzDwb6teAX1RbKQmqtEF8k
 // property of the INPUT that the notice never checked, and once path-binding
 // was ungated for canonical shapes it could be false. It now names the SLOTS
 // and the remedy, which is what the operator can act on.
-const DEFAULT_PATH_NOTICE: &str = "info: no origin supplied for";
+// Since Brian's ruling of 2026-11-26 both are one WARNING (exit 4) naming the
+// path the toolkit chose, followed by the command that states it.
+const DEFAULT_PATH_NOTICE: &str = "(BIP-48 cosigner path) and the cards record it";
+/// Substring of the canonical-shape warning (bug hunt 2026-11-25 toolkit#1).
+const CANONICAL_ORIGIN_NOTICE: &str = "(this descriptor shape's canonical origin)";
 
 /// `bundle --descriptor <d> --slot <s>… --json` → (parsed JSON, raw stderr).
 /// Always `--no-engraving-card`, mainnet.
@@ -65,7 +69,12 @@ fn bundle(descriptor: &str, slots: &[&str]) -> (Value, String) {
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .success();
+        // An origin the toolkit chose exits 4 (Brian's ruling of 2026-11-26).
+        .code(if slots.iter().any(|s| s.contains(".path=")) {
+            0
+        } else {
+            4
+        });
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout)
@@ -95,102 +104,70 @@ fn decode_mk1(chunks: &[String]) -> (String, String, u8) {
 }
 
 // ============================================================================
-// FLIP #1 (funds-load-bearing) — no-origin sh(wpkh) now emits an
-// EMPTY-ORIGIN / MASTER-KEY card with NO default-path notice (wpkh-parity),
-// NOT the pre-flip 48'/0'/0'/1' + notice. (plan-R0 C1 — assert empty/master.)
+// FLIP #1 (funds-load-bearing) — AMENDED 2026-11-25 (bug hunt toolkit#1, see
+// design/SPEC_toolkit_repin_sh_wpkh.md "AMENDMENT 2026-11-25"). A no-origin
+// canonical sh(wpkh) used to emit an EMPTY-ORIGIN / MASTER-KEY card. It now
+// derives at md-codec's canonical origin for the shape (m/49'/0'/0'), WRITES
+// that origin on the card, and prints the canonical-origin info notice. Still
+// NOT the pre-flip 48'/0'/0'/1'.
 // ============================================================================
 
 #[test]
-fn flip1_shwpkh_no_origin_emits_master_key_card_no_notice() {
+fn flip1_shwpkh_no_origin_emits_canonical_origin_card_with_notice() {
     let slot = format!("@0.phrase={SEED}");
-    let (v, stderr) = bundle("sh(wpkh(@0))", &[slot.as_str()]);
-
-    // Top-level JSON origin is the empty/default sentinel (null), NOT 48'/0'.
-    assert!(
-        v["origin_path"].is_null(),
-        "post-flip sh(wpkh) no-origin: top-level origin_path must be null (empty/master); got {:?}",
-        v["origin_path"]
-    );
+    let (v, stderr) = bundle("sh(wpkh(@0/*))", &[slot.as_str()]);
     assert_eq!(v["mode"], "full");
 
-    // The emitted mk1 encodes the MASTER key: empty origin path, depth 0.
     let (origin, xpub, depth) = decode_mk1(&mk1_chunks(&v));
-    assert!(
-        origin.is_empty(),
-        "post-flip sh(wpkh) no-origin: mk1 origin_path must be empty/master (m/), NOT 48'/0'/0'/1' \
-         and NOT 49'; got {origin:?}"
-    );
     assert_eq!(
-        depth, 0,
-        "master key is depth-0; got depth {depth} (a defaulted origin would be depth-4)"
+        origin, "49'/0'/0'",
+        "sh(wpkh) no-origin: mk1 origin is the canonical m/49'/0'/0', written on the card"
     );
-    assert!(
-        xpub.starts_with("xpub661My"),
-        "depth-0 mainnet master xpub must carry the xpub661My… prefix; got {xpub}"
-    );
-    assert_eq!(
+    assert_eq!(depth, 3, "canonical account key is depth-3; got {depth}");
+    assert_ne!(
         xpub, SEED_MASTER_XPUB,
-        "sh(wpkh) no-origin must encode the SEED master xpub (empty-origin derivation)"
+        "the master key must never be bound implicitly"
     );
-
-    // The default-path notice is ABSENT (canonical → no default-inference).
     assert!(
-        !stderr.contains(DEFAULT_PATH_NOTICE),
-        "post-flip sh(wpkh) is canonical: the default-path notice must be ABSENT; got stderr:\n{stderr}"
+        stderr.contains("warning: no origin was given for @0")
+            && stderr.contains("chose m/49'/0'/0' (this descriptor shape's canonical origin)"),
+        "the canonical-origin notice must name the path; got stderr:\n{stderr}"
     );
     assert!(
         !stderr.contains("48'/0'/0'/1'"),
-        "post-flip must NOT mention the pre-flip 48'/0'/0'/1' default; got stderr:\n{stderr}"
+        "must NOT mention the pre-flip 48'/0'/0'/1' default; got stderr:\n{stderr}"
     );
 }
 
-/// RED-proof-equivalent (B0 already flipped, so this proves flip #1 genuinely
-/// exercises the flip): a CANONICAL `wpkh(@0)` no-origin emits the SAME
-/// empty-origin / master-key card, and post-flip `sh(wpkh(@0))` now MATCHES it
-/// in the decoded key. Pre-flip these diverged (wpkh=master, sh(wpkh)=48'/0'/0'/1').
+/// `wpkh(@0)` and `sh(wpkh(@0))` no-origin: each derives at ITS OWN canonical
+/// origin (84' / 49'), neither at the master key.
 #[test]
-fn flip1_shwpkh_now_matches_canonical_wpkh_master_parity() {
+fn flip1_wpkh_and_shwpkh_each_use_their_canonical_origin() {
     let slot = format!("@0.phrase={SEED}");
-    let (vw, stderr_w) = bundle("wpkh(@0)", &[slot.as_str()]);
-    let (vs, stderr_s) = bundle("sh(wpkh(@0))", &[slot.as_str()]);
+    let (vw, stderr_w) = bundle("wpkh(@0/*)", &[slot.as_str()]);
+    let (vs, stderr_s) = bundle("sh(wpkh(@0/*))", &[slot.as_str()]);
 
     let (ow, xw, dw) = decode_mk1(&mk1_chunks(&vw));
     let (os, xs, ds) = decode_mk1(&mk1_chunks(&vs));
 
-    // wpkh(@0) is (and always was) canonical → master/empty.
-    assert!(
-        ow.is_empty() && dw == 0,
-        "wpkh(@0) no-origin must be master/empty"
-    );
-    // sh(wpkh(@0)) now has PARITY with wpkh(@0): identical empty origin, depth,
-    // and xpub.
-    assert_eq!(
-        os, ow,
-        "sh(wpkh) origin must now match canonical wpkh (both empty)"
-    );
-    assert_eq!(
-        ds, dw,
-        "sh(wpkh) depth must now match canonical wpkh (both depth-0)"
-    );
-    assert_eq!(
-        xs, xw,
-        "sh(wpkh) master xpub must now match canonical wpkh's"
-    );
-    // Neither canonical shape emits the default-path notice.
-    assert!(!stderr_w.contains(DEFAULT_PATH_NOTICE));
-    assert!(!stderr_s.contains(DEFAULT_PATH_NOTICE));
+    assert_eq!(ow, "84'/0'/0'");
+    assert_eq!(os, "49'/0'/0'");
+    assert_eq!((dw, ds), (3, 3));
+    assert_ne!(xw, xs, "different canonical paths give different keys");
+    assert_ne!(xw, SEED_MASTER_XPUB);
+    assert!(stderr_w.contains(CANONICAL_ORIGIN_NOTICE));
+    assert!(stderr_s.contains(CANONICAL_ORIGIN_NOTICE));
 }
 
-/// The flip-#1 "notice absent" assertion is non-vacuous: a genuinely
-/// NON-canonical descriptor STILL receives the default-path notice + a
-/// non-empty (48'/0'/0'/2') origin. Confirms the notice machinery is live and
-/// that sh(wpkh) is on the canonical side of it.
+/// A genuinely NON-canonical descriptor receives the default-path notice and a
+/// non-empty (48'/0'/0'/2') origin; canonical shapes get the separate
+/// canonical-origin notice (flip #1, as amended 2026-11-25).
 #[test]
 fn non_canonical_descriptor_still_gets_default_path_notice() {
     let s0 = format!("@0.phrase={SEED}");
     let s1 = format!("@1.phrase={SEED_B}");
     let (v, stderr) = bundle(
-        "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+        "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))",
         &[s0.as_str(), s1.as_str()],
     );
     assert_eq!(
@@ -217,7 +194,7 @@ fn flip2_shwpkh_nonzero_account_refuses_mode_violation() {
         .args([
             "bundle",
             "--descriptor",
-            "sh(wpkh(@0))",
+            "sh(wpkh(@0/*))",
             "--account",
             "1",
             "--network",
@@ -247,7 +224,7 @@ fn flip2_shwpkh_account_zero_still_succeeds() {
         .args([
             "bundle",
             "--descriptor",
-            "sh(wpkh(@0))",
+            "sh(wpkh(@0/*))",
             "--account",
             "0",
             "--network",
@@ -258,7 +235,7 @@ fn flip2_shwpkh_account_zero_still_succeeds() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
 }
 
 // ============================================================================
@@ -277,7 +254,7 @@ fn flip3_shwpkh_secret_bearing_path_override_refuses() {
         .args([
             "bundle",
             "--descriptor",
-            "sh(wpkh(@0))",
+            "sh(wpkh(@0/*))",
             "--network",
             "mainnet",
             "--slot",
@@ -306,7 +283,7 @@ fn flip3_shwpkh_watch_only_xpub_path_override_still_succeeds() {
     const XPUB: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9";
     let s0 = format!("@0.xpub={XPUB}");
     let (v, _stderr) = bundle(
-        "sh(wpkh(@0))",
+        "sh(wpkh(@0/*))",
         &[
             s0.as_str(),
             "@0.fingerprint=deadbeef",
@@ -357,7 +334,7 @@ fn flip4_preflip_elided_shwpkh_bundle_fails_verify_as_byte_mismatch() {
         "--network".into(),
         "mainnet".into(),
         "--descriptor".into(),
-        "sh(wpkh(@0))".into(),
+        "sh(wpkh(@0/*))".into(),
         "--slot".into(),
         format!("@0.phrase={SEED}"),
         "--json".into(),
@@ -407,8 +384,8 @@ fn flip4_preflip_elided_shwpkh_bundle_fails_verify_as_byte_mismatch() {
     );
     assert_eq!(
         path_check["expected"].as_str(),
-        Some(""),
-        "post-flip re-derived origin path is EMPTY (master); got {:?}",
+        Some("49'/0'/0'"),
+        "re-derived origin path is the canonical 49'/0'/0' (toolkit#1); got {:?}",
         path_check["expected"]
     );
     assert_eq!(
@@ -533,7 +510,7 @@ fn mirror_unchanged_shwpkh_template_emit_still_refused() {
         .args([
             "bundle",
             "--descriptor",
-            "sh(wpkh(@0))",
+            "sh(wpkh(@0/*))",
             "--network",
             "mainnet",
             "--md1-form",

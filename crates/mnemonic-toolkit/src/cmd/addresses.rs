@@ -36,7 +36,7 @@ pub struct AddressesArgs {
     pub address_type: ScriptType,
 
     /// Account index (seed sources only). Default 0.
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 0, value_parser = crate::parse::parse_account_arg)]
     pub account: u32,
 
     /// Number of addresses per chain, from index 0 (default 10). Conflicts with `--range`.

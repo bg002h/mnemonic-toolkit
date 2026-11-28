@@ -12,12 +12,27 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
-/// Single-`@0` non-canonical descriptor (from `cli_ms1_slot.rs:294`).
-const NONCANONICAL_DESC: &str = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
+/// Non-canonical descriptor that takes the BIP-87 default origin. Two keys:
+/// since tk-bh1125-tr-tree-bip87-scope and tk-bh1125-rr1-m3-bip48-thresh-scope
+/// (Brian's rulings 2026-11-26) a tree with fewer than two distinct keys, such
+/// as `tr(NUMS,multi_a(1,@0/*))`, gets no default origin, and an
+/// `@0.entropy=` slot cannot carry `@0.path=` (slot grammar), so the default
+/// is kept by the shape instead. `@1` is a phrase slot ([`entropy_slots`]).
+const NONCANONICAL_DESC: &str = "tr(NUMS,multi_a(1,@0/*,@1/*))";
+
+/// `@0.entropy=<hex>` plus the phrase cosigner `@1` that [`NONCANONICAL_DESC`]
+/// needs.
+fn entropy_slots(hex: &str) -> Vec<String> {
+    vec![
+        format!("@0.entropy={hex}"),
+        format!("@1.phrase={BIP39_TEST_3}"),
+    ]
+}
+
 /// Proven non-canonical 3-cosigner fixture that bundles secret slots with
 /// `.success()` (from `cli_non_canonical_descriptor.rs:22`).
 const ANDOR3_DESC: &str =
-    "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+    "wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))";
 
 const TREZOR_12_ZERO: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -85,7 +100,7 @@ fn bundle_cards(
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .success();
+        .code(4);
     let v: serde_json::Value =
         serde_json::from_slice(&out.get_output().stdout).expect("descriptor bundle JSON");
     extract_cards(&v)
@@ -133,7 +148,7 @@ fn verify_args(
 #[test]
 fn round_trip_len32() {
     let hex = hex::encode([0x07u8; 32]);
-    let slots = vec![format!("@0.entropy={hex}")];
+    let slots = entropy_slots(&hex);
     let cards = bundle_cards(NONCANONICAL_DESC, &slots, &[]);
 
     Command::cargo_bin("mnemonic")
@@ -150,7 +165,7 @@ fn round_trip_len32() {
 #[test]
 fn round_trip_len16() {
     let hex = hex::encode([0x42u8; 16]);
-    let slots = vec![format!("@0.entropy={hex}")];
+    let slots = entropy_slots(&hex);
     let cards = bundle_cards(NONCANONICAL_DESC, &slots, &[]);
 
     Command::cargo_bin("mnemonic")
@@ -189,7 +204,7 @@ fn nonzero_slot_multi_n() {
 #[test]
 fn passphrase_round_trip() {
     let hex = hex::encode([0x5au8; 32]);
-    let slots = vec![format!("@0.entropy={hex}")];
+    let slots = entropy_slots(&hex);
     let cards = bundle_cards(
         NONCANONICAL_DESC,
         &slots,
@@ -220,7 +235,7 @@ fn passphrase_round_trip() {
 #[test]
 fn passphrase_mismatch_detected() {
     let hex = hex::encode([0x5au8; 32]);
-    let slots = vec![format!("@0.entropy={hex}")];
+    let slots = entropy_slots(&hex);
     let cards = bundle_cards(NONCANONICAL_DESC, &slots, &["--passphrase", "right"]);
 
     Command::cargo_bin("mnemonic")

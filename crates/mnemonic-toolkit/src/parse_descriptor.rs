@@ -54,6 +54,10 @@ pub struct PlaceholderOccurrence {
     pub origin_path_anno: Option<DerivationPath>,
     pub multipath_alts: Vec<u32>,
     pub wildcard_hardened: bool,
+    /// A `/*` (or `/*'`, `/*h`) follows the placeholder. False only for a
+    /// bare `@N` with no derivation after it (a multipath with no `/*` is
+    /// refused by the lexer), which `bundle` refuses at mint (review r1 B4).
+    pub wildcard: bool,
 }
 
 /// Lex every `@N[fp/path]/<multipath>/*` occurrence (SPEC §4.9 step 2).
@@ -251,6 +255,7 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
             origin_path_anno,
             multipath_alts,
             wildcard_hardened,
+            wildcard: caps.name("wild").is_some(),
         });
     }
     if out.is_empty() {
@@ -2063,6 +2068,7 @@ mod tests {
             origin_path_anno: None,
             multipath_alts: vec![0, 1],
             wildcard_hardened: false,
+            wildcard: true,
         };
         let r = resolve_placeholders(&[occ.clone(), occ]).unwrap();
         assert_eq!(r.n, 1);
@@ -2158,6 +2164,7 @@ mod tests {
             origin_path_anno: None,
             multipath_alts: vec![0, 1],
             wildcard_hardened: false,
+            wildcard: true,
         };
         assert!(make_use_site_path(&clean_occ).is_ok());
     }
@@ -3576,6 +3583,7 @@ mod tests {
             origin_path_anno: None,
             multipath_alts: vec![0, 1],
             wildcard_hardened: false,
+            wildcard: true,
         };
         let occ_b = PlaceholderOccurrence {
             i: 0,
@@ -3583,6 +3591,7 @@ mod tests {
             origin_path_anno: None,
             multipath_alts: vec![2, 3], // differs!
             wildcard_hardened: false,
+            wildcard: true,
         };
         let err = resolve_placeholders(&[occ_a, occ_b]).unwrap_err();
         assert!(err.message().contains("inconsistent"));

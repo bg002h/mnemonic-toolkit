@@ -24,6 +24,12 @@ fn bundle_general(descriptor: &str) -> Vec<String> {
 }
 
 fn bundle_general_net(descriptor: &str, network: &str) -> Vec<String> {
+    bundle_general_with(descriptor, network, &[], 4)
+}
+
+/// `extra` is appended to the bundle command; `code` is its expected exit
+/// (4 when the toolkit chooses an origin, 0 when every origin is given).
+fn bundle_general_with(descriptor: &str, network: &str, extra: &[&str], code: i32) -> Vec<String> {
     let phrases = [C0, C1, C2];
     let max_n = (0u8..3)
         .filter(|n| descriptor.contains(&format!("@{n}")))
@@ -40,6 +46,7 @@ fn bundle_general_net(descriptor: &str, network: &str) -> Vec<String> {
         args.push("--slot".into());
         args.push(format!("@{n}.phrase={}", phrases[n as usize]));
     }
+    args.extend(extra.iter().map(|e| e.to_string()));
     args.push("--json".into());
     args.push("--no-engraving-card".into());
     let out = Command::cargo_bin("mnemonic")
@@ -47,7 +54,7 @@ fn bundle_general_net(descriptor: &str, network: &str) -> Vec<String> {
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .success();
+        .code(code);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).expect("bundle JSON");
     v["md1"]
         .as_array()
@@ -161,7 +168,7 @@ fn assert_md1_fixed_point(original_md1: &[String], reconstructed_descriptor: &st
 /// null top-level threshold, md1 fixed-point.
 #[test]
 fn general_and_v_older_reconstructs_faithfully() {
-    let md1 = bundle_general("wsh(and_v(v:multi(2,@0,@1),older(4032)))");
+    let md1 = bundle_general("wsh(and_v(v:multi(2,@0/*,@1/*),older(4032)))");
     let v = restore_json(&md1);
     let w = &v["wallets"][0];
     let desc = w["descriptor"].as_str().unwrap();
@@ -198,7 +205,14 @@ fn general_and_v_older_reconstructs_faithfully() {
 /// this single-key class would have collapsed) + md1 fixed-point.
 #[test]
 fn n1_general_wsh_timelocked_restores_faithfully() {
-    let md1 = bundle_general("wsh(and_v(v:pk(@0),older(144)))");
+    // A single-key wsh takes no BIP-48 default (tk-bh1125-rr1-m3-bip48-thresh-
+    // scope, Brian 2026-11-26), so the origin is given.
+    let md1 = bundle_general_with(
+        "wsh(and_v(v:pk(@0/*),older(144)))",
+        "mainnet",
+        &["--slot", "@0.path=m/48'/0'/0'/2'"],
+        0,
+    );
     let v = restore_json(&md1);
     let w = &v["wallets"][0];
     let desc = w["descriptor"].as_str().unwrap();
@@ -220,7 +234,7 @@ fn n1_general_wsh_timelocked_restores_faithfully() {
 /// timelock survive; threshold is null (NOT the first multi's k).
 #[test]
 fn general_decay_vault_reconstructs_faithfully() {
-    let md1 = bundle_general("wsh(or_d(multi(2,@0,@1),and_v(v:multi(1,@2),older(1000))))");
+    let md1 = bundle_general("wsh(or_d(multi(2,@0/*,@1/*),and_v(v:multi(1,@2/*),older(1000))))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
     assert!(
@@ -244,7 +258,7 @@ fn general_decay_vault_reconstructs_faithfully() {
 #[test]
 fn general_sha256_hashlock_reconstructs_faithfully() {
     let h = "926a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084dbc";
-    let md1 = bundle_general(&format!("wsh(and_v(v:multi(2,@0,@1),sha256({h})))"));
+    let md1 = bundle_general(&format!("wsh(and_v(v:multi(2,@0/*,@1/*),sha256({h})))"));
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
     assert!(
@@ -257,7 +271,7 @@ fn general_sha256_hashlock_reconstructs_faithfully() {
 /// (4) `--format descriptor`/`bip388` emit the FAITHFUL general descriptor.
 #[test]
 fn general_format_descriptor_is_faithful() {
-    let md1 = bundle_general("wsh(and_v(v:multi(2,@0,@1),older(4032)))");
+    let md1 = bundle_general("wsh(and_v(v:multi(2,@0/*,@1/*),older(4032)))");
     let mut a = restore_md1_args(&md1);
     a.push("--format".into());
     a.push("descriptor".into());
@@ -277,7 +291,7 @@ fn general_format_descriptor_is_faithful() {
 /// + parses normally; the advisory fires at the post-`from_str` Adapter-B hook.
 #[test]
 fn general_masked_older_emits_advisory() {
-    let md1 = bundle_general("wsh(and_v(v:multi(2,@0,@1),older(65536)))");
+    let md1 = bundle_general("wsh(and_v(v:multi(2,@0/*,@1/*),older(65536)))");
     let mut a = restore_md1_args(&md1);
     a.push("--format".into());
     a.push("descriptor".into());
@@ -297,7 +311,7 @@ fn general_masked_older_emits_advisory() {
 /// block value (low-16 nonzero, no stray bits), so no `advisory: older` on stderr.
 #[test]
 fn general_clean_older_no_advisory() {
-    let md1 = bundle_general("wsh(and_v(v:multi(2,@0,@1),older(4032)))");
+    let md1 = bundle_general("wsh(and_v(v:multi(2,@0/*,@1/*),older(4032)))");
     let mut a = restore_md1_args(&md1);
     a.push("--format".into());
     a.push("descriptor".into());
@@ -315,7 +329,7 @@ fn general_clean_older_no_advisory() {
 /// (loud, exit non-zero) — it cannot represent a non-k-of-n policy.
 #[test]
 fn general_format_coldcard_refuses() {
-    let md1 = bundle_general("wsh(and_v(v:multi(2,@0,@1),older(4032)))");
+    let md1 = bundle_general("wsh(and_v(v:multi(2,@0/*,@1/*),older(4032)))");
     let mut a = restore_md1_args(&md1);
     a.push("--format".into());
     a.push("coldcard".into());
@@ -333,7 +347,7 @@ fn general_format_coldcard_refuses() {
 /// positions + the timelock survive.
 #[test]
 fn general_pkh_leaf_reconstructs_after_md_codec_fix() {
-    let md1 = bundle_general("wsh(or_d(multi(2,@0,@1),and_v(v:pkh(@2),older(144))))");
+    let md1 = bundle_general("wsh(or_d(multi(2,@0/*,@1/*),and_v(v:pkh(@2/*),older(144))))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
     assert!(desc.contains("or_d(multi(2,"), "outer multi kept: {desc}");
@@ -353,7 +367,7 @@ fn general_pkh_leaf_reconstructs_after_md_codec_fix() {
 #[test]
 fn flagship_pk_keyed_vault_reconstructs() {
     let md1 = bundle_general(
-        "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))",
+        "wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))",
     );
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
@@ -376,7 +390,7 @@ fn flagship_pk_keyed_vault_reconstructs() {
 /// path is exercised byte-for-byte by the 13+12 `--template` goldens.)
 #[test]
 fn general_wildcard_only_multipath_none_reconstructs_without_fabricating_multipath() {
-    let md1 = bundle_general("wsh(and_v(v:multi(2,@0,@1),older(4032)))");
+    let md1 = bundle_general("wsh(and_v(v:multi(2,@0/*,@1/*),older(4032)))");
     let v = restore_json(&md1);
     let w = &v["wallets"][0];
     let desc = w["descriptor"].as_str().unwrap();
@@ -415,7 +429,7 @@ fn general_multipath_0_1_reconstructs_with_multixpub_arm() {
 /// md-codec hardcodes Main).
 #[test]
 fn general_testnet_network_corrected() {
-    let md1 = bundle_general_net("wsh(and_v(v:multi(2,@0,@1),older(50)))", "testnet");
+    let md1 = bundle_general_net("wsh(and_v(v:multi(2,@0/*,@1/*),older(50)))", "testnet");
     let mut a = restore_md1_args_net(&md1, "testnet");
     a.push("--json".into());
     let out = Command::cargo_bin("mnemonic")
@@ -439,7 +453,7 @@ fn general_testnet_network_corrected() {
 /// (9) `after()` absolute timelock survives.
 #[test]
 fn general_after_reconstructs_faithfully() {
-    let md1 = bundle_general("wsh(and_v(v:multi(2,@0,@1),after(800000)))");
+    let md1 = bundle_general("wsh(and_v(v:multi(2,@0/*,@1/*),after(800000)))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
     assert!(desc.contains("after(800000)"), "after kept: {desc}");
@@ -450,7 +464,7 @@ fn general_after_reconstructs_faithfully() {
 /// refusal pre-fix at `template_from_descriptor`'s `ShInner::Ms` arm).
 #[test]
 fn general_legacy_sh_multi_reconstructs() {
-    let md1 = bundle_general("sh(multi(2,@0,@1))");
+    let md1 = bundle_general("sh(multi(2,@0/*,@1/*))");
     let v = restore_json(&md1);
     let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
     assert!(
@@ -627,7 +641,7 @@ fn taproot_nums_multi_a_hardened_override_still_refused() {
 /// key, D7 out of scope) STAYS loud-refused. NEGATIVE test.
 #[test]
 fn taproot_non_nums_multi_a_override_still_refused() {
-    let md1 = bundle_general("tr(@0,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))");
+    let md1 = bundle_general("tr(@0/*,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))");
     Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -687,9 +701,13 @@ fn assert_divergent_address_independent_golden(reconstructed_desc: &str) {
 /// Offline-anchored golden: chain0/idx0 of
 /// `wsh(multi(2, <C0-xpub>/<0;1>/*, <C1-xpub>/<2;3>/*))`. @1's divergence makes
 /// this DISTINCT from the all-baseline `wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))`
-/// address — the anti-clobber discriminator. Captured 2026-06-19 by test (11g).
+/// address — the anti-clobber discriminator. Captured 2026-06-19 by test (11g);
+/// RE-CAPTURED 2026-11-25 (bug hunt toolkit#1): `wsh(multi)` is a canonical
+/// shape, so `bundle --descriptor` with bare `@N` seed slots now derives each
+/// key at the canonical origin m/48'/0'/0'/2' (written on the card) instead of
+/// at the master node. The old value was the master-key wallet's address.
 const DIVERGENT_WSH_MULTI_CHAIN0_IDX0_GOLDEN: &str =
-    "bc1qkay38njhhx0c5zx43vrfglxlj0wa7dhm7d54q9fu7gredyj8hpusnqjy9k";
+    "bc1qrce3xdgthdumu3u6h2kucc0mnxlwat3sk5yvznj7avmks6ghv5mq0rff63";
 
 /// (11g) GENERATOR + anti-vacuity: prove the divergent golden DIFFERS from the
 /// all-baseline address (so the golden actually anchors divergence, not codec
@@ -739,13 +757,13 @@ fn divergent_golden_differs_from_baseline_and_anchors() {
 /// divergence makes this DISTINCT from the all-baseline `@1/<0;1>` taproot
 /// address — the anti-clobber discriminator. The C0/C1 xpubs are fixed by the
 /// phrases, so the address is deterministic. Captured by the (11g-tr) generator.
-// H12 (cycle-1): re-captured after the taproot default-origin fix moved the
-// cosigner derivation from the (wrong) 2' subtree to the correct 3' (P2TR)
-// subtree — every taproot address legitimately changed. Generated by
+// Re-captured 2026-11-25 after the BIP-defaults ruling moved the taproot
+// multisig default from BIP-48 `…/3'` to BIP-87 `m/87'/0'/0'` (earlier: H12
+// moved it from 2' to 3') — every taproot address legitimately changed. Generated by
 // `divergent_taproot_golden_differs_from_baseline_and_anchors` (run with
 // --nocapture to re-capture).
 const DIVERGENT_TR_MULTI_A_CHAIN0_IDX0_GOLDEN: &str =
-    "bc1p6ufcpkkkcj60lat0n3qxtzyejc0z8ctlw9sl6u0k5qv88jv792xqulpz9z";
+    "bc1psew7pgfzc99qec0s9lrdddj0qp00y49hjmj98mh9m9z4rhxmwl6s9w0q0e";
 
 /// Independent address-equivalence golden for the taproot multi_a override leg
 /// (P2.5 / SPEC Min-3). The golden descriptor is HAND-WRITTEN from the two

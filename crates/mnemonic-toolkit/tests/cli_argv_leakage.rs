@@ -97,32 +97,11 @@ fn bundle_slot_entropy_stdin_succeeds() {
 // Cell 3 — `bundle --slot @0.wif=-`
 // ============================================================================
 
+/// Bug hunt 2026-11-25 X4: `bundle --template` now REFUSES a WIF slot at mint
+/// (a WIF has no chain code; every template derives ranged child addresses).
+/// The stdin form `@0.wif=-` reaches that refusal, not a parse error.
 #[test]
-fn bundle_slot_wif_stdin_succeeds() {
-    Command::cargo_bin("mnemonic")
-        .unwrap()
-        .arg("--allow-argv-secret")
-        .args([
-            "bundle",
-            "--slot",
-            "@0.wif=-",
-            "--network",
-            "mainnet",
-            "--template",
-            "bip84",
-            "--no-engraving-card",
-        ])
-        .write_stdin(MAINNET_WIF.as_bytes())
-        .assert()
-        .success();
-}
-
-// v0.37.10 — the 0.3.1 pin emitted a WIF mk1 card that ENCODED but could not DECODE
-// (decode_path rejected the empty/no-path origin as PathTooDeep(0)). mk-codec 0.4.0's
-// no-path/depth-0 support makes it round-trip: bundle the WIF, then `inspect` the
-// emitted mk1 card (which decodes via mk_codec::decode).
-#[test]
-fn bundle_wif_mk1_round_trips_via_inspect() {
+fn bundle_slot_wif_stdin_refused_at_mint() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -135,30 +114,33 @@ fn bundle_wif_mk1_round_trips_via_inspect() {
             "--template",
             "bip84",
             "--no-engraving-card",
-            "--json",
         ])
         .write_stdin(MAINNET_WIF.as_bytes())
         .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
-    // MkField is #[serde(untagged)] → single-sig serializes as a flat array.
-    let mk1: Vec<String> = json["mk1"]
-        .as_array()
-        .expect("mk1 array")
-        .iter()
-        .map(|v| v.as_str().unwrap().to_string())
-        .collect();
-    assert!(
-        !mk1.is_empty(),
-        "bundle must emit an mk1 card for the WIF slot"
-    );
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("@0.wif is refused"), "stderr: {stderr}");
+}
+
+// v0.37.10 — the 0.3.1 pin emitted a WIF mk1 card that ENCODED but could not DECODE
+// (decode_path rejected the empty/no-path origin as PathTooDeep(0)). mk-codec 0.4.0's
+// no-path/depth-0 support makes it round-trip. Since X4 (2026-11-25) `bundle` no
+// longer MINTS a WIF card, so this fixture was captured from the toolkit before
+// that change (`bundle --slot @0.wif=- --template bip84 --network mainnet` with
+// MAINNET_WIF on stdin): an EXISTING WIF card must keep decoding.
+const PRE_X4_WIF_MK1: &[&str] = &[
+    "mk1qpskrypqqsqctpj8kgqqqqqqlcqqfz9jrcqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqxa5945vdr3qrvzs5",
+    "mk1qpskryppvwmqpg9mdghjhmmmh9jgygkrtyaxaa0hctvpgv79ryalsjulsc4akdv9ys65a2p9cuhphmu",
+];
+
+#[test]
+fn existing_wif_mk1_card_still_decodes_via_inspect() {
     let mut args: Vec<String> = vec!["inspect".into()];
-    for c in &mk1 {
+    for c in PRE_X4_WIF_MK1 {
         args.push("--mk1".into());
-        args.push(c.clone());
+        args.push((*c).into());
     }
-    // The depth-0 / no-path card must now DECODE (the round-trip the 0.3.1 pin broke).
     Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")

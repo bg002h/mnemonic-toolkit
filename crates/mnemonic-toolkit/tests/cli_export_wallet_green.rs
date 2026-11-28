@@ -58,6 +58,8 @@ fn cell_2_green_multisig_refuses_byte_exact() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
+            // Bug hunt 2026-11-25 toolkit#5: a defaulted origin that contradicts
+            // the xpub's header is refused, so the fixture states each key's real origin.
             "export-wallet",
             "--format",
             "green",
@@ -72,13 +74,19 @@ fn cell_2_green_multisig_refuses_byte_exact() {
             "--slot",
             &format!("@0.xpub={COSIGNER_A_XPUB}"),
             "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
             &format!("@0.fingerprint={COSIGNER_A_FP}"),
             "--slot",
             &format!("@1.xpub={COSIGNER_B_XPUB}"),
             "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+            "--slot",
             &format!("@1.fingerprint={COSIGNER_B_FP}"),
             "--slot",
             &format!("@2.xpub={COSIGNER_C_XPUB}"),
+            "--slot",
+            "@2.path=m/87'/0'/0'",
             "--slot",
             &format!("@2.fingerprint={COSIGNER_C_FP}"),
         ])
@@ -234,6 +242,8 @@ fn cell_7_green_bip86_keypath_emission_unchanged() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
+            // Bug hunt 2026-11-25 toolkit#5: a defaulted origin that contradicts
+            // the xpub's header is refused, so the fixture states each key's real origin.
             "export-wallet",
             "--format",
             "green",
@@ -243,6 +253,8 @@ fn cell_7_green_bip86_keypath_emission_unchanged() {
             "mainnet",
             "--slot",
             &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
             "--slot",
             &format!("@0.fingerprint={COSIGNER_A_FP}"),
             "--output",

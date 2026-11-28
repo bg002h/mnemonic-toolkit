@@ -118,7 +118,7 @@ fn p25_restore_nums_tr_multisig_bip388_refuses() {
         b.push(format!("@{i}.phrase={p}"));
     }
     let (code, stdout, stderr) = run(&b);
-    assert_eq!(code, 0, "bundle: {stderr}");
+    assert_eq!(code, 4, "bundle: {stderr}");
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     let mut r: Vec<String> = vec!["restore".into(), "--network".into(), "signet".into()];
     for c in v["md1"].as_array().unwrap() {
@@ -354,6 +354,10 @@ fn bip388v_restore_repeated_key_bip388_refused() {
         "wsh(or_d(pk(@0/<0;1>/*),and_v(v:pk(@0/<0;1>/*),older(100))))",
         "--slot",
         &format!("@0.phrase={C0}"),
+        // One distinct key takes no BIP-48 default (tk-bh1125-rr1-m3-bip48-
+        // thresh-scope, Brian 2026-11-26): state the path XA_BUNDLE sits at.
+        "--slot",
+        "@0.path=m/48'/1'/0'/2'",
         "--network",
         "signet",
         "--json",

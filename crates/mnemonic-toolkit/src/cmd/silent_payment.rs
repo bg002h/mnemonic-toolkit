@@ -54,7 +54,7 @@ pub struct SilentPaymentArgs {
     pub network: CliNetwork,
 
     /// BIP-32 account index (`m/352'/coin'/account'/…`).
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 0, value_parser = crate::parse::parse_account_arg)]
     pub account: u32,
 
     /// Emit a labeled silent-payment address for label m (repeatable). m≥1;

@@ -57,7 +57,7 @@ The two key-path variants are selected differently in `bundle`:
   flag is needed. The bundle embeds the BIP-341 reference NUMS
   point as the internal key.
 - **Designated-cosigner variant** — supply a user-defined BIP-388
-  descriptor via `--descriptor 'tr(@N,sortedmulti_a(K,@0,…))'`,
+  descriptor via `--descriptor 'tr(@N/<0;1>/*,sortedmulti_a(K,@0/<0;1>/*,…))'`,
   promoting cosigner `@N` out of the script-path leaf set into the
   key-path. The bundle binds slot `@N` to the chosen cosigner's
   xpub.
@@ -74,6 +74,7 @@ mnemonic bundle \
   --network mainnet \
   --template tr-sortedmulti-a \
   --threshold 2 \
+  --multisig-path-family bip87 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
   --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
@@ -89,12 +90,19 @@ the script path; the NUMS point cannot sign.
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --descriptor 'tr(@2,sortedmulti_a(2,@0,@1))' \
+  --descriptor 'tr(@2/*,sortedmulti_a(2,@0/*,@1/*))' \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
   --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
   --self-check
 ```
+
+No `@N` here names an origin, so the toolkit derives every key at the
+BIP-87 default `m/87'/0'/0'`, writes it on the cards, warns, prints the
+command that states it, and `bundle` exits 4 (see
+[Exit status](#mnemonic-bundle-exit-status)). Add
+`--slot @N.path=m/87'/0'/0'` for each key, or the path your cosigners
+really use, and it exits 0.
 
 Cosigner 2's xpub becomes the key-path. The script-path leaf is
 `sortedmulti_a(2, @0, @1)` — only cosigners 0 and 1 in the leaf,
@@ -123,7 +131,7 @@ D" — supply a user-defined BIP-388 wallet policy directly:
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --descriptor 'tr(@4,{multi_a(2,@0,@1,@2),and_v(v:older(52596),pk(@3))})' \
+  --descriptor 'tr(@4/*,{multi_a(2,@0/*,@1/*,@2/*),and_v(v:older(52596),pk(@3/*))})' \
   --slot @0.phrase=<…> \
   --slot @1.phrase=<…> \
   --slot @2.phrase=<…> \

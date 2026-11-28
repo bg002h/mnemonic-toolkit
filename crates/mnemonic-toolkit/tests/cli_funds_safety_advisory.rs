@@ -98,7 +98,7 @@ fn restore_md1(cards: &[String]) -> assert_cmd::assert::Assert {
 /// CUSTOM override fires the loud funds-safety warning at bundle (exit 0).
 #[test]
 fn bundle_custom_override_fires_funds_safety_warning() {
-    let out = bundle_two_cosigner(CUSTOM_OVERRIDE).success();
+    let out = bundle_two_cosigner(CUSTOM_OVERRIDE).code(4);
     let stderr = String::from_utf8_lossy(&out.get_output().stderr).into_owned();
     assert!(
         stderr.contains(FS_PREFIX) && stderr.contains("PERMANENT LOSS OF FUNDS"),
@@ -109,7 +109,7 @@ fn bundle_custom_override_fires_funds_safety_warning() {
 /// BASELINE (uniform) does NOT fire the loud warning at bundle.
 #[test]
 fn bundle_baseline_uniform_no_funds_safety_warning() {
-    let out = bundle_two_cosigner(BASELINE_UNIFORM).success();
+    let out = bundle_two_cosigner(BASELINE_UNIFORM).code(4);
     let stderr = String::from_utf8_lossy(&out.get_output().stderr).into_owned();
     assert!(
         !stderr.contains(FS_PREFIX),
@@ -121,7 +121,7 @@ fn bundle_baseline_uniform_no_funds_safety_warning() {
 /// loud funds-safety one (mutual exclusion at the engrave surface).
 #[test]
 fn bundle_sortedmulti_a_override_no_funds_safety_warning() {
-    let out = bundle_two_cosigner(SORTEDMULTI_A_OVERRIDE).success();
+    let out = bundle_two_cosigner(SORTEDMULTI_A_OVERRIDE).code(4);
     let stderr = String::from_utf8_lossy(&out.get_output().stderr).into_owned();
     assert!(
         !stderr.contains(FS_PREFIX),
@@ -138,7 +138,7 @@ fn bundle_sortedmulti_a_override_no_funds_safety_warning() {
 /// the loud warning.
 #[test]
 fn bundle_nontaproot_override_no_funds_safety_warning() {
-    let out = bundle_two_cosigner(NONTAPROOT_OVERRIDE).success();
+    let out = bundle_two_cosigner(NONTAPROOT_OVERRIDE).code(4);
     let stderr = String::from_utf8_lossy(&out.get_output().stderr).into_owned();
     assert!(
         !stderr.contains(FS_PREFIX),
@@ -149,7 +149,7 @@ fn bundle_nontaproot_override_no_funds_safety_warning() {
 /// The `--json` stdout payload never carries the warning (it is on stderr).
 #[test]
 fn bundle_json_stdout_clean_warning_on_stderr() {
-    let out = bundle_two_cosigner(CUSTOM_OVERRIDE).success();
+    let out = bundle_two_cosigner(CUSTOM_OVERRIDE).code(4);
     let o = out.get_output();
     let stdout = String::from_utf8_lossy(&o.stdout);
     let stderr = String::from_utf8_lossy(&o.stderr);
@@ -172,7 +172,7 @@ fn bundle_json_stdout_clean_warning_on_stderr() {
 /// wrong restore function, assertion (1) fails RED.
 #[test]
 fn restore_custom_override_warns_loudly_and_still_succeeds() {
-    let bundled = bundle_two_cosigner(CUSTOM_OVERRIDE).success();
+    let bundled = bundle_two_cosigner(CUSTOM_OVERRIDE).code(4);
     let cards = md1_cards(&bundled.get_output().stdout);
 
     let r = restore_md1(&cards).success(); // (2) exit 0 (Ok(0))
@@ -195,7 +195,7 @@ fn restore_custom_override_warns_loudly_and_still_succeeds() {
 /// BASELINE (uniform) restore: SUCCEEDS, NO loud warning.
 #[test]
 fn restore_baseline_uniform_no_warning_and_succeeds() {
-    let bundled = bundle_two_cosigner(BASELINE_UNIFORM).success();
+    let bundled = bundle_two_cosigner(BASELINE_UNIFORM).code(4);
     let cards = md1_cards(&bundled.get_output().stdout);
     let r = restore_md1(&cards).success();
     let stderr = String::from_utf8_lossy(&r.get_output().stderr).into_owned();
