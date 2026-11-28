@@ -169,8 +169,15 @@ pub fn run() -> ExitCode {
     // `Cli::try_parse()`, split so the network rule learns whether `--network`
     // was typed on the leaf subcommand (N2 `<run>`: "no --network given").
     let parsed = Cli::command().try_get_matches().and_then(|mut m| {
-        crate::network_rule::set_network_given(network_typed(&m));
-        Cli::from_arg_matches_mut(&mut m).map_err(|e| e.format(&mut Cli::command()))
+        crate::network_rule::set_network_given(arg_typed(&m, "network"));
+        let account_typed = arg_typed(&m, "account");
+        let mut cli =
+            Cli::from_arg_matches_mut(&mut m).map_err(|e| e.format(&mut Cli::command()))?;
+        // Step 8a-0: restore refuses a typed `--account` beside `--origin`.
+        if let Command::Restore(a) = &mut cli.command {
+            a.account_given = account_typed;
+        }
+        Ok(cli)
     });
     let cli = match parsed {
         Ok(c) => c,
@@ -296,15 +303,15 @@ pub fn run() -> ExitCode {
     exit
 }
 
-/// Whether `--network` was typed on the command line of the leaf subcommand
-/// (a clap default does not count).
-fn network_typed(m: &clap::ArgMatches) -> bool {
+/// Whether the argument `id` (`network`, `account`) was typed on the command
+/// line of the leaf subcommand (a clap default does not count).
+fn arg_typed(m: &clap::ArgMatches, id: &str) -> bool {
     let mut m = m;
     while let Some((_, sub)) = m.subcommand() {
         m = sub;
     }
-    m.ids().any(|id| id.as_str() == "network")
-        && m.value_source("network") == Some(clap::parser::ValueSource::CommandLine)
+    m.ids().any(|i| i.as_str() == id)
+        && m.value_source(id) == Some(clap::parser::ValueSource::CommandLine)
 }
 
 /// Map the exit code once (T6): a recorded stdout write error prints

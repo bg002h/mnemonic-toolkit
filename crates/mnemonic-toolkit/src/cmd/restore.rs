@@ -124,13 +124,19 @@ pub struct RestoreArgs {
     #[arg(long, value_delimiter = ',', default_value = "0")]
     pub account: Vec<u32>,
 
-    /// #28 phase 1 — explicit origin derivation path for single-sig
-    /// template-completion (`restore --md1 <keyless-template>`). Overrides the
-    /// template's canonical `m/<purpose>'/<coin>'/<account>'` default with an
-    /// arbitrary BIP-32 path (e.g. `m/84'/0'/7'`). Only meaningful for keyless
-    /// single-sig template md1 restore; ignored otherwise.
+    /// Explicit origin derivation path of the account key (e.g. `m/84'/0'/7'`),
+    /// overriding the template's canonical `m/<purpose>'/<coin>'/<account>'`.
+    /// Single-sig restore (no `--md1`) requires one `--template` with it and
+    /// refuses a typed `--account`; single-sig template completion (`--md1
+    /// <keyless-template>`) and multisig template completion take it as the
+    /// own key's origin.
     #[arg(long = "origin")]
     pub origin: Option<String>,
+
+    /// Whether `--account` was typed on the command line (the default `0`
+    /// does not count); set by the CLI after parsing.
+    #[arg(skip)]
+    pub account_given: bool,
 
     /// #28 phase 1 — expected `WalletPolicyId` (hex prefix) for single-sig
     /// template-completion. Restore recomputes the `WalletPolicyId` from the
@@ -593,6 +599,23 @@ pub fn run<R: Read, W: Write, E: Write>(
         });
     }
 
+    // Step 8a-0: `--origin` names one account of one type, so it requires a
+    // single `--template`, and it already holds the account step.
+    if args.origin.is_some() && args.template.is_none() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--origin",
+            message: "--origin requires --template <bip44|bip49|bip84|bip86> (an origin path is one account of one type)",
+        });
+    }
+    if args.origin.is_some() && args.account_given {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--account",
+            message: "restore: --origin gives the whole path, account included; drop --account or drop --origin.",
+        });
+    }
+
     // `--format` drives a single `export-wallet` emitter — one descriptor in,
     // one payload out — so it cannot straddle the all-4 default. Require a single
     // `--template` (SPEC I-A: ModeViolation exit 2, NOT BadInput exit 1).
@@ -710,6 +733,17 @@ pub fn run<R: Read, W: Write, E: Write>(
     // (`--allow-mismatch` does not pass it). The seed is typed now (N6).
     network_check(args, origin_expect_sources(args), true, stderr)?;
 
+    // Step 8a-0: a typed `--origin` is the account path (one template, gated
+    // above), as in template completion.
+    let explicit_origin = match args.origin.as_deref() {
+        Some(s) => Some(
+            DerivationPath::from_str(s.trim_start_matches("m/").trim_start_matches('m'))
+                .or_else(|_| DerivationPath::from_str(s))
+                .map_err(|e| bad(format!("--origin {s}: {e}")))?,
+        ),
+        None => None,
+    };
+
     // Derive each selected single-sig type. The master fingerprint is
     // path-independent — identical across all four — so capture it once.
     let secp = Secp256k1::verification_only();
@@ -717,14 +751,23 @@ pub fn run<R: Read, W: Write, E: Write>(
     let mut rows: Vec<WalletRow> = Vec::with_capacity(templates.len());
 
     for &template in templates {
-        let acct = derive_bip32_from_entropy(
-            &entropy,
-            &passphrase,
-            derive_language,
-            network,
-            template,
-            args.account_primary(),
-        )?;
+        let acct = match &explicit_origin {
+            Some(path) => crate::derive_slot::derive_bip32_from_entropy_at_path(
+                &entropy,
+                &passphrase,
+                derive_language,
+                network,
+                path,
+            )?,
+            None => derive_bip32_from_entropy(
+                &entropy,
+                &passphrase,
+                derive_language,
+                network,
+                template,
+                args.account_primary(),
+            )?,
+        };
         master_fingerprint = Some(acct.master_fingerprint);
 
         let script_type = script_type_from_template(template)

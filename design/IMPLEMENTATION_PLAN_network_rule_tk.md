@@ -882,3 +882,12 @@ deviations from the plan's text. Each is listed for the whole-diff review.
   unreachable for a parseable address.
 - **Unit 8b: RED check.** With src at the unit-8a commit, both `nr8b_*`
   tests fail (addresses still infers and exits 1).
+- **Step 8a-0 (own commit, pending Brian's ruling).** Built as the plan's
+  first option: single-sig restore derives at `--origin`, requires one
+  `--template` (ModeViolation, exit 2: `--origin requires --template
+  <bip44|bip49|bip84|bip86> (an origin path is one account of one type)`;
+  the plan named the rule but not the text) and refuses a typed `--account`
+  beside it (the plan's text). "Typed" is read with clap's `value_source` in
+  `cli.rs` (`RestoreArgs::account_given`, `#[arg(skip)]`), the same way as
+  `--network`. Test `nr8a0_restore_single_sig_derives_at_origin`, failing
+  before the commit (the `m/84'/1'/0'` wallet printed).

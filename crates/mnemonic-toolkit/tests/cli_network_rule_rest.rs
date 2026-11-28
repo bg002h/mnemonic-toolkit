@@ -1092,3 +1092,75 @@ fn nr8b_existing_refusals_exit_8_one_wording() {
         "error: network mismatch: --search-address tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl is a signet or testnet address, but this run is on mainnet (no --network given). Nothing was written. Rerun with --network signet or --network testnet, or give an address of mainnet."
     );
 }
+
+#[test]
+fn nr8a0_restore_single_sig_derives_at_origin() {
+    // Step 8a-0: single-sig restore derives at --origin (was ignored).
+    let want = "tpubDC8msFGeGuwnZEmE5EafaSXx77kqBW4Esv1CbScrVARRoAwHZ1ZdCQdg9Br4vd4SETVXFNZZRxrLgA5ws8PYs1pc2eNCWfmkX8tE71n5bs8";
+    let conv = run(&[
+        "convert",
+        "--from",
+        &phrase(),
+        "--to",
+        "xpub",
+        "--path",
+        "m/84h/1h/5h",
+        "--network",
+        "testnet",
+        "--allow-argv-secret",
+    ]);
+    assert_eq!(out(&conv), format!("xpub: {want}\n"), "{}", err(&conv));
+    let base = [
+        "restore",
+        "--from",
+        &phrase(),
+        "--template",
+        "bip84",
+        "--origin",
+        "m/84h/1h/5h",
+        "--network",
+        "testnet",
+        "--allow-argv-secret",
+        "--count",
+        "1",
+    ]
+    .map(|s| s.to_string());
+    let o = run_s(&base);
+    assert_eq!(o.status.code(), Some(0), "{}", err(&o));
+    assert!(
+        out(&o).contains(&format!(
+            "descriptor: wpkh([73c5da0a/84'/1'/5']{want}/<0;1>/*)"
+        )),
+        "{}",
+        out(&o)
+    );
+    // --expect-xpub is compared with the key derived at --origin.
+    let mut e = base.to_vec();
+    e.extend(["--expect-xpub".into(), want.into()]);
+    let o = run_s(&e);
+    assert_eq!(o.status.code(), Some(0), "{}", err(&o));
+    // --origin needs one --template.
+    let no_t: Vec<String> = base
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != 3 && *i != 4)
+        .map(|(_, s)| s.clone())
+        .collect();
+    let o = run_s(&no_t);
+    assert_eq!(o.status.code(), Some(2), "{}", err(&o));
+    assert!(o.stdout.is_empty(), "{}", out(&o));
+    assert_eq!(
+        last_stderr_line(&o),
+        "error: --origin requires --template <bip44|bip49|bip84|bip86> (an origin path is one account of one type)"
+    );
+    // A typed --account beside --origin is refused; the default 0 is not.
+    let mut a = base.to_vec();
+    a.extend(["--account".into(), "0".into()]);
+    let o = run_s(&a);
+    assert_eq!(o.status.code(), Some(2), "{}", err(&o));
+    assert!(o.stdout.is_empty(), "{}", out(&o));
+    assert_eq!(
+        last_stderr_line(&o),
+        "error: restore: --origin gives the whole path, account included; drop --account or drop --origin."
+    );
+}
