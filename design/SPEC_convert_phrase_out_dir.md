@@ -1,6 +1,6 @@
 # SPEC — `mnemonic convert --phrase-out-dir`: save seed words to an owner-only file
 
-Status: DRAFT; Brian's rulings of 2026-11-28 folded (§3, §6); R0 round 1 (1C/8I/12m, `design/agent-reports/phrase-out-dir-spec-R0.md`) folded. Not implemented.
+Status: DRAFT; Brian's rulings of 2026-11-28 folded (§3, §6); R0 round 1 (1C/8I/12m) and R1 (0C/3I/10m) folded (`design/agent-reports/phrase-out-dir-spec-R{0,1}.md`). Not implemented.
 Baseline: mnemonic-toolkit `master` at `d72a18b`.
 
 ## 1. Why
@@ -74,12 +74,16 @@ of them.
 ### 2.3 What is printed
 
 - The `phrase` target is NOT printed to stdout. Other targets print as today.
-- stderr: `saved phrase to <path> (fingerprint <fp>, without passphrase)`, or
-  `already saved: <path>`.
-- `--json` (additive v1 extension, `schema_version` stays `"1"`): the phrase
-  entry is `{"node":"phrase","path":"<path>","already_saved":<bool>}`, with
-  `value` omitted, only under `--phrase-out-dir`. Every other shape is
-  unchanged. Recorded in the manual and CHANGELOG as a v1 extension.
+- stderr: `saved phrase to <path> (fingerprint <fp>, without passphrase)`;
+  with `--name-with-passphrase-fp`: `saved phrase to <path> (fingerprint <fp>
+  without passphrase, <fp-pass> with it)`; or `already saved: <path>`.
+- `--json`: under `--phrase-out-dir` the phrase entry is
+  `{"node":"phrase","path":"<path>","already_saved":<bool>}`, with `value`
+  omitted; one entry however many times `--to phrase` is given. Following the
+  repo precedent (`inspect` and `word-card` bumped for added fields),
+  `schema_version` becomes `"2"` **only when `--phrase-out-dir` is present**;
+  without the flag the envelope is byte-identical `"1"`. Manual and CHANGELOG
+  record it (R1 m).
 - The stdout private-material warning is computed from what is emitted
   (verified by R0), so it is silent when the phrase was the only secret output.
 - `--group-size`/`--separator` are accepted. They only ever group ms1/mk1
@@ -120,15 +124,21 @@ seed-<YYYY-MM-DD>-<fp>[-<fp-pass>][-<language>].txt
 
 - `<YYYY-MM-DD>`: today's date in the machine's **local time zone** (Brian,
   2026-11-28: *"use local time when available"*). On Unix: `libc::time` +
-  `localtime_r` (`libc` is already a direct dependency; `mnemonic` is
-  single-threaded and no non-test code calls `setenv`, so this is sound). On
-  Windows, or if `localtime_r` fails: the UTC date by civil-from-days
+  `localtime_r` (`libc` is already a direct dependency; sound because no other
+  thread is live during `convert` and no non-test code calls `setenv`). On
+  Windows: `GetLocalTime` through `windows-sys` 0.61.2, already locked and
+  vendored, added as a direct target dependency (no new crate; vendor-freshness
+  gate runs). Only if the call fails: the UTC date by civil-from-days
   arithmetic, and stderr says `note: local time zone unavailable; file date is
-  UTC`. No new dependency (R0 m-1). Tests inject the date through a seam.
+  UTC`. glibc and musl return UTC *with success* when no zone is configured, so
+  that case gives a UTC date with no note; that is accepted, and the build must
+  not treat `tm_gmtoff == 0` as "unavailable" (it is a real UK offset). Tests
+  inject the date through a seam (R1 I-3).
 - `<fp>`: `master_fingerprint(PBKDF2(words written to the file, ""))`, 8
-  lowercase hex, computed with the same NFKD and derivation function that
-  `--to fingerprint` uses, so the two agree when no passphrase is given. It
-  needs no `--template` and no `--network` (a master fingerprint depends on
+  lowercase hex: NFKD, BIP-39 PBKDF2 to the seed, BIP-32 master key, first 4
+  bytes of HASH160 of its public key. It equals what `--to fingerprint` prints
+  with no passphrase, but is computed by a template-free helper: it needs no
+  `--template` and no `--network` (a master fingerprint depends on
   neither) and is computed for every input, the `ms1` arm included, which
   derives nothing today (R0 I-2). This is "the hash of the words" (§6 C1).
 - `-<fp-pass>` (Brian: *"if user supplies passphrase use xfp for both raw seed
@@ -158,34 +168,51 @@ Date first so a directory listing sorts by date.
 - Buffers holding the words or a compared file's bytes are
   `Zeroizing<Vec<u8>>` and mlock-pinned like `primary_value`
   (`convert.rs:957-966`) (R0 m-10).
-- **Never replaces anything (R0 I-1).** `mnemonic_io_lib::write::write_private`
-  replaces and follows symlinks, so it is NOT used. Instead, in the toolkit:
-  1. create `DIR/.<name>.<pid>.tmp` with `create_new(true)` and mode `0o600`,
-     write, fsync;
-  2. `fs::hard_link(temp, DIR/<name>)` (atomic; fails with EEXIST on any
-     existing entry and does not follow a symlink there), then unlink the temp
-     and fsync `DIR`;
-  3. where hard links are unsupported (FAT/exFAT sticks, some SMB/FUSE mounts):
-     unlink the temp and open `DIR/<name>` with `create_new(true)` and `0o600`
-     directly (`O_CREAT|O_EXCL`, which also refuses a dangling symlink).
+- **Never replaces anything (R0 I-1, R1 I-1).** `mnemonic_io_lib::write::write_private`
+  replaces and follows symlinks, so it is NOT used. Instead, in the toolkit,
+  with `N = DIR/<name>`:
+  0. `symlink_metadata(N)`. If an entry exists, go to "An entry already at the
+     name" below; no temp is ever created on that path.
+  1. Create `T = DIR/seed-tmp-<pid>-<k>.txt` with `create_new(true)` and mode
+     `0o600`, `k` counting up from 0 on EEXIST (at most 16 tries, then `Io`).
+     Write, `fsync(T)`.
+  2. `fs::hard_link(T, N)`: atomic; EEXIST on any entry, and it does not follow
+     a symlink at `N`. On EEXIST (a racer won), go to the entry check below.
+  3. `unlink(T)` on **every** outcome of step 2 (success, EEXIST, error), then
+     `fsync(DIR)`. No path leaves `T` behind except a kill (below).
+  4. Fallback, only when `hard_link` fails with `EPERM`, `EOPNOTSUPP`/`ENOTSUP`,
+     `EXDEV` or `EMLINK` (FAT/exFAT sticks, some SMB/FUSE mounts): after step 3,
+     open `N` with `create_new(true)` and `0o600` (`O_CREAT|O_EXCL`, which also
+     refuses a dangling symlink), write, `fsync(N)`, `fsync(DIR)`. On any error
+     after `N` was created by this open, `unlink(N)` before exiting, so a full
+     or pulled stick never leaves a truncated seed file under the real name.
+     Any other `hard_link` errno is `Io`.
+  5. After the write, `fstat` the handle. If group or other bits are set (mount
+     options decide modes on vfat, exfat, ntfs3, SMB and FUSE), print the same
+     warning as on Windows: `warning: file permissions not restricted on this
+     filesystem; protect <path>` (R1 I-2).
   A follow-up hoists this into mnemonic-io-lib as `write_private_new` (a
   cross-repo change with a publish; not in this build).
-- **An entry already at the name** (EEXIST, examined with `symlink_metadata`,
-  never `metadata`/`exists`):
-  - a regular, non-symlink file of at most 1 KiB whose bytes equal the new
-    bytes → `already saved`, exit 0, the file untouched (no chmod, no write);
-  - anything else (different bytes, a symlink, FIFO, device, directory, an
-    oversized file) → `PhraseFileExists`, nothing written. A FIFO is never
-    opened.
-- A kill between steps 1 and 2 leaves `.<name>.<pid>.tmp` (0600, holding the
-  words). The manual says so; the name carries the fingerprint, so it can be
-  found (R0 m-3).
+- **An entry already at the name** (from step 0, or EEXIST in steps 2 or 4):
+  examined with `symlink_metadata`, never `metadata`/`exists`.
+  - A regular, non-symlink file of at most 1 KiB: open it with
+    `O_RDONLY|O_NOFOLLOW|O_NONBLOCK`, `fstat` the handle and re-check it is a
+    regular file of at most 1 KiB (closes the lstat-then-open race), read and
+    compare. Equal bytes → `already saved`, exit 0, untouched (no chmod, no
+    write); the step-5 mode warning applies to it too. Different bytes →
+    `PhraseFileExists`.
+  - Anything else (symlink, FIFO, device, directory, oversized file) →
+    `PhraseFileExists`, nothing written. A FIFO is never opened for blocking.
+- A kill between steps 1 and 3 leaves `seed-tmp-<pid>-<k>.txt` (0600, holding
+  the words; visible to `ls`, not dot-hidden). The manual says so, and step 0's
+  stale-copy note (below) also lists any `seed-tmp-*.txt` it sees (R0 m-3).
 - `DIR` edges (R0 m-4): a symlink to a directory is followed (stated in help);
   `DIR` group- or world-writable → stderr warning (others could delete the
   file or plant names); `DIR` under `/dev/fd` needs no special case (the joined
   name is not numeric).
 - Saving the same seed on another day writes a second file. If a
-  `seed-*-<fp>*.txt` already exists in `DIR`, stderr notes it (R0 m-9).
+  `seed-*-<fp>*.txt` or any `seed-tmp-*.txt` already exists in `DIR`, stderr
+  notes it (R0 m-9).
 - Non-Unix (Windows): no mode bits. The file is written and stderr says
   `warning: file permissions not restricted on this platform; protect <path>`
   (ruled, §6 C5).
@@ -274,7 +301,8 @@ engraving as the durable form. Encryption (`age`) is out of scope here.
 - mnemonic-gui `src/schema/mnemonic.rs` `CONVERT_FLAGS` gains both flags;
   `--phrase-out-dir` is `Path { stdio_sentinel: false }`, as for `gen-man --out`
   (no new `FlagKind`). `src/form/conditional.rs` (`convert`, :460-471) shows
-  `--name-with-passphrase-fp` only when `--phrase-out-dir` is set. Then the
+  `--name-with-passphrase-fp` only when `--phrase-out-dir` is set, and
+  `--phrase-out-dir` only when `--to` includes `phrase`. Then the
   pinned-upstream bump and `cargo test --test schema_mirror`.
 - CHANGELOG and version bump; toolkit FOLLOWUPS for F-579 convergence (closed by
   the build) and for hoisting `write_private_new` into mnemonic-io-lib.
@@ -294,13 +322,18 @@ engraving as the durable form. Encryption (`age`) is out of scope here.
   never appears in the file or name;
 - `phrase`→`phrase`: with `--phrase-out-dir` writes the canonical words; without
   it the existing refusal, byte-identical, exit 2;
-- local time unavailable → UTC date and the note (through the seam);
+- local time call failing → UTC date and the note (through the seam); a UTC
+  zone with success → no note;
 - contents: bare words + one `\n`; round-trips through `bundle --slot @0.phrase=-`
   (English, and Japanese with `--language japanese`); ms-cli's reader emulated in
   a unit test (split on whitespace, join with one space, `parse_in`), since no
   toolkit test runs `ms`;
 - mode `0o600` under `umask 000`;
-- existing identical file → exit 0, untouched (mtime and mode unchanged);
+- existing identical file → exit 0, untouched (mtime and mode unchanged), and
+  no `seed-tmp-*` left in `DIR`; same after a `PhraseFileExists` refusal;
+- fallback write failing mid-file (seam) → no file at the name, no temp left;
+- a 0644 result (seam standing in for a vfat mount) → the permissions warning;
+- temp-name EEXIST → next `k`;
   differing file, symlink (dangling and live), FIFO and directory at the name →
   exit 1 `PhraseFileExists`, nothing written, FIFO never opened;
 - hard-link-unsupported fallback path through a seam;
