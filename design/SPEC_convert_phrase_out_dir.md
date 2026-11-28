@@ -1,6 +1,6 @@
 # SPEC — `mnemonic convert --phrase-out-dir`: save seed words to an owner-only file
 
-Status: DRAFT; Brian's rulings of 2026-11-28 folded (§3, §6); R0 round 1 (1C/8I/12m) and R1 (0C/3I/10m) folded (`design/agent-reports/phrase-out-dir-spec-R{0,1}.md`). Not implemented.
+Status: DRAFT; Brian's rulings of 2026-11-28 folded (§3, §6); R0 round 1 (1C/8I/12m) R1 (0C/3I/10m) and R2 (0C/1I/4m) folded (`design/agent-reports/phrase-out-dir-spec-R{0,1,2}.md`). Not implemented.
 Baseline: mnemonic-toolkit `master` at `d72a18b`.
 
 ## 1. Why
@@ -127,8 +127,10 @@ seed-<YYYY-MM-DD>-<fp>[-<fp-pass>][-<language>].txt
   `localtime_r` (`libc` is already a direct dependency; sound because no other
   thread is live during `convert` and no non-test code calls `setenv`). On
   Windows: `GetLocalTime` through `windows-sys` 0.61.2, already locked and
-  vendored, added as a direct target dependency (no new crate; vendor-freshness
-  gate runs). Only if the call fails: the UTC date by civil-from-days
+  vendored, added as a direct Windows target dependency with features
+  `Win32_System_SystemInformation` and `Win32_Foundation` (no new crate, but
+  `Cargo.lock` changes; re-vendor and the vendor-freshness gate run).
+  `GetLocalTime` cannot fail. Only if Unix `localtime_r` fails: the UTC date by civil-from-days
   arithmetic, and stderr says `note: local time zone unavailable; file date is
   UTC`. glibc and musl return UTC *with success* when no zone is configured, so
   that case gives a UTC date with no note; that is accepted, and the build must
@@ -175,18 +177,20 @@ Date first so a directory listing sorts by date.
      name" below; no temp is ever created on that path.
   1. Create `T = DIR/seed-tmp-<pid>-<k>.txt` with `create_new(true)` and mode
      `0o600`, `k` counting up from 0 on EEXIST (at most 16 tries, then `Io`).
-     Write, `fsync(T)`.
+     Write, `fsync(T)`. On any error after `T` was created, `unlink(T)` and exit
+     `Io`. **Invariant: `T` is unlinked before `convert` returns on every path;
+     only a kill can leave it.**
   2. `fs::hard_link(T, N)`: atomic; EEXIST on any entry, and it does not follow
      a symlink at `N`. On EEXIST (a racer won), go to the entry check below.
   3. `unlink(T)` on **every** outcome of step 2 (success, EEXIST, error), then
-     `fsync(DIR)`. No path leaves `T` behind except a kill (below).
-  4. Fallback, only when `hard_link` fails with `EPERM`, `EOPNOTSUPP`/`ENOTSUP`,
-     `EXDEV` or `EMLINK` (FAT/exFAT sticks, some SMB/FUSE mounts): after step 3,
+     `fsync(DIR)`.
+  4. Fallback, on any `hard_link` error other than EEXIST (FAT/exFAT sticks on
+     any OS, SMB, FUSE including `ENOSYS`; safe whatever the cause, because the
+     fallback is exclusive-create): after step 3,
      open `N` with `create_new(true)` and `0o600` (`O_CREAT|O_EXCL`, which also
      refuses a dangling symlink), write, `fsync(N)`, `fsync(DIR)`. On any error
      after `N` was created by this open, `unlink(N)` before exiting, so a full
      or pulled stick never leaves a truncated seed file under the real name.
-     Any other `hard_link` errno is `Io`.
   5. After the write, `fstat` the handle. If group or other bits are set (mount
      options decide modes on vfat, exfat, ntfs3, SMB and FUSE), print the same
      warning as on Windows: `warning: file permissions not restricted on this
@@ -196,7 +200,10 @@ Date first so a directory listing sorts by date.
 - **An entry already at the name** (from step 0, or EEXIST in steps 2 or 4):
   examined with `symlink_metadata`, never `metadata`/`exists`.
   - A regular, non-symlink file of at most 1 KiB: open it with
-    `O_RDONLY|O_NOFOLLOW|O_NONBLOCK`, `fstat` the handle and re-check it is a
+    `O_RDONLY|O_NOFOLLOW|O_NONBLOCK` on Unix (on Windows, which has no
+    `O_NOFOLLOW`, open with `FILE_FLAG_OPEN_REPARSE_POINT` via
+    `OpenOptionsExt::custom_flags`, so a reparse point is opened as itself and
+    then refused by the type check), `fstat` the handle and re-check it is a
     regular file of at most 1 KiB (closes the lstat-then-open race), read and
     compare. Equal bytes → `already saved`, exit 0, untouched (no chmod, no
     write); the step-5 mode warning applies to it too. Different bytes →
@@ -332,6 +339,7 @@ engraving as the durable form. Encryption (`age`) is out of scope here.
 - existing identical file → exit 0, untouched (mtime and mode unchanged), and
   no `seed-tmp-*` left in `DIR`; same after a `PhraseFileExists` refusal;
 - fallback write failing mid-file (seam) → no file at the name, no temp left;
+- step-1 write or fsync failing (seam, e.g. ENOSPC) → exit 1, no temp left;
 - a 0644 result (seam standing in for a vfat mount) → the permissions warning;
 - temp-name EEXIST → next `k`;
   differing file, symlink (dangling and live), FIFO and directory at the name →
