@@ -365,7 +365,7 @@ pub struct ConvertArgs {
     pub json: bool,
 
     /// Write the `phrase` output to a NEW owner-only (0600) file in DIR
-    /// instead of stdout, named seed-<local date>-<fingerprint>[-<language>].txt.
+    /// instead of stdout, named `seed-<local date>-<fingerprint>[-<language>].txt`.
     /// Needs `--to phrase`. DIR must already exist and is never created; a
     /// symlink to a directory is followed. The file holds the bare words and
     /// one newline (`bundle --slot @0.phrase=- < FILE` and `ms encode --in

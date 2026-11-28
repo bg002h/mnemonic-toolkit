@@ -780,14 +780,20 @@ fn ms1_decode_failure_on_the_repair_path_writes_no_file() {
 
 #[test]
 fn f579_english_french_ambiguous_phrase_does_not_panic() {
-    for from in ["phrase=-"] {
-        let r = run(
-            &["convert", "--from", from, "--to", "entropy"],
-            Some(AMBIGUOUS),
-        );
-        assert_eq!(r.code, 0, "{}", r.stderr);
-        assert_eq!(r.stdout.trim(), format!("entropy: {AMBIGUOUS_ENTROPY}"));
-    }
+    let r = run(
+        &[
+            "convert",
+            "--from",
+            "phrase=-",
+            "--to",
+            "entropy",
+            "--language",
+            "english",
+        ],
+        Some(AMBIGUOUS),
+    );
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert_eq!(r.stdout.trim(), format!("entropy: {AMBIGUOUS_ENTROPY}"));
     // seedqr of the same phrase: 23 × 0000 then surface (index 1745).
     let seedqr = format!("{}1745", "0000".repeat(23));
     let r = run(
