@@ -53,7 +53,7 @@ Behaviour:
 ## 3. File name
 
 ```
-seed-<YYYY-MM-DD>-<fp>[-<language>].txt
+seed-<YYYY-MM-DD>-<fp>[-<fp-pass>][-<language>].txt
 ```
 
 - `<YYYY-MM-DD>`: today's date, **UTC** (see §6, concern C3).
@@ -61,11 +61,19 @@ seed-<YYYY-MM-DD>-<fp>[-<language>].txt
   passphrase**, 8 lowercase hex characters, the same value `--to fingerprint`
   prints. This is "the hash of the words" (see §6, concern C1 for why not a
   plain SHA-256).
+- `-<fp-pass>` (Brian, 2026-11-28: *"if user supplies passphrase use xfp for
+  both raw seed and with passphrase applied in filename"*): present only when
+  the user supplies a non-empty BIP-39 passphrase through `convert`'s existing
+  `--passphrase` / `--passphrase-stdin` / `@env:VAR` channels. It is the master
+  fingerprint with that passphrase applied, 8 lowercase hex. Raw seed first,
+  passphrase second. The passphrase itself is never written to the file or the
+  name. An empty passphrase adds no second fingerprint.
 - `-<language>`: present only when the wordlist is not English, using the
   `--language` value (`-japanese`, `-spanish`, …), so the reader knows which
   `--language` to pass back.
 
-Example (public test seed, all-zero entropy): `seed-2026-11-28-73c5da0a.txt`.
+Examples (public test seed, all-zero entropy): `seed-2026-11-28-73c5da0a.txt`;
+with a passphrase: `seed-2026-11-28-73c5da0a-<fp-pass>.txt`.
 
 Date first so a directory listing sorts by date.
 
@@ -133,11 +141,19 @@ consequences:
   fingerprint printed on stderr for the user to note down. Recommended: keep the
   fingerprint; it is the identifier every other tool here already shows.
 
-**C2. The passphrase is not in the name.** The fingerprint is the one with an
-empty passphrase. A wallet that uses a BIP-39 passphrase has a different
-fingerprint in its descriptors, so its file name will not match its wallet. That
-is correct (the file holds no passphrase) but can surprise. The success line
-says `fingerprint without passphrase`.
+**C2. RULED 2026-11-28: both fingerprints when a passphrase is given.** This
+fixes the mismatch (a passphrase wallet's file now carries the fingerprint its
+descriptors show). One new risk follows, and the build must state it in `--help`:
+**the second fingerprint lets anyone who holds the file test passphrase guesses
+offline.** The file holds the words, the name holds the target, so a thief needs
+nothing else: no chain data, no xpub. The passphrase's job is to protect a stolen
+seed, and this name hands the thief a checker for it. Cost per guess is one
+PBKDF2 (2048 rounds); 32 bits means a passphrase weaker than about 32 bits is
+found exactly. (An xpub or descriptor stored next to the file already gives the
+same check, and a used wallet's addresses give a slower one.) Options: (a) as
+ruled; (b) keep the second fingerprint off by default and add it with
+`--name-with-passphrase-fp`; (c) print it on stderr only. Recommended: (b), but
+the spec follows the ruling (a) until Brian says otherwise.
 
 **C3. Which date.** UTC, because the toolkit has no time-zone dependency and the
 result must not depend on the machine's TZ. Near midnight the date can be "wrong"
