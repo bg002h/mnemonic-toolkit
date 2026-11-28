@@ -280,16 +280,6 @@ pub enum ToolkitError {
     MultisigConfig {
         message: String,
     },
-    /// A decoded key's NetworkKind (mainnet vs testnet/signet/regtest)
-    /// disagrees with the asserted network (coin-type-derived, `--network`, or
-    /// a WIF's own network byte). cycle-5 S-NET: fail-closed network-provenance
-    /// invariant, wired at import/convert/export sites via
-    /// `network::assert_network_agrees`. Exit 2 (user-input / funds-safety).
-    NetworkMismatch {
-        decoded_network: &'static str,
-        expected_network: &'static str,
-        context: &'static str,
-    },
     /// A nostr key (`npub`/`nsec` NIP-19 bech32 or 64-hex) failed to decode or
     /// validate (bad bech32/HRP/length, not-on-curve x-only, out-of-range scalar).
     /// The network rule (SPEC_network_rule.md): a source of one network
@@ -680,7 +670,6 @@ impl ToolkitError {
             ToolkitError::ModeViolation { .. } => 2,
             ToolkitError::MsCodec(e) => ms_codec_exit_code(e),
             ToolkitError::MultisigConfig { .. } => 1,
-            ToolkitError::NetworkMismatch { .. } => 2,
             ToolkitError::NetworkRule { .. } => crate::network_rule::EXIT_NETWORK_MISMATCH,
             ToolkitError::NostrKeyParse(_) => 1,
             ToolkitError::Render(_) => 2,
@@ -750,7 +739,6 @@ impl ToolkitError {
             ToolkitError::ModeViolation { .. } => "ModeViolation",
             ToolkitError::MsCodec(_) => "MsCodec",
             ToolkitError::MultisigConfig { .. } => "MultisigConfig",
-            ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
             ToolkitError::NetworkRule { .. } => "NetworkRule",
             ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
             ToolkitError::Render(_) => "Render",
@@ -931,15 +919,6 @@ impl ToolkitError {
             ToolkitError::ModeViolation { message, .. } => (*message).to_owned(),
             ToolkitError::MsCodec(e) => crate::friendly::friendly_ms_codec(e),
             ToolkitError::MultisigConfig { message } => message.clone(),
-            ToolkitError::NetworkMismatch {
-                decoded_network,
-                expected_network,
-                context,
-            } => format!(
-                "network mismatch: {context}: key encodes {decoded_network} but \
-                 {expected_network} was asserted (xpub version bytes distinguish \
-                 mainnet vs testnet/signet/regtest only)"
-            ),
             ToolkitError::NetworkRule { lines } => {
                 let joined: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
                 let joined = joined.join("\n");
@@ -1029,15 +1008,6 @@ impl ToolkitError {
             ToolkitError::ModeViolation { mode, flag, .. } => Some(json!({
                 "mode": mode,
                 "flag": flag,
-            })),
-            ToolkitError::NetworkMismatch {
-                decoded_network,
-                expected_network,
-                context,
-            } => Some(json!({
-                "decoded_network": decoded_network,
-                "expected_network": expected_network,
-                "context": context,
             })),
             ToolkitError::SlotInputViolation { kind, .. } => Some(json!({ "kind": kind })),
             _ => None,
@@ -1169,15 +1139,6 @@ mod tests {
                 mode: "watch-only",
                 flag: "--passphrase",
                 message: "x",
-            }
-            .exit_code(),
-            2,
-        );
-        assert_eq!(
-            ToolkitError::NetworkMismatch {
-                decoded_network: "mainnet",
-                expected_network: "testnet",
-                context: "test"
             }
             .exit_code(),
             2,

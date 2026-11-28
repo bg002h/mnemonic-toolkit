@@ -3,8 +3,10 @@
 //!
 //! Per `design/SPEC_network_fail_open_assert_agrees.md` §4: an asserted
 //! `--network` (explicit OR clap-default) that disagrees with a key's version
-//! bytes must now fail closed (`NetworkMismatch`, exit 2) instead of silently
-//! rendering/deriving/re-emitting at the wrong network.
+//! bytes must fail closed instead of silently rendering/deriving/re-emitting
+//! at the wrong network. Since the network rule (design/SPEC_network_rule.md)
+//! every edge refuses with the rule's text and exit 8, and no `--network` is
+//! mainnet (D1): nothing infers the network from a key.
 //!
 //! All keys are PUBLIC never-fund test vectors, derived from the standard
 //! BIP-39 test mnemonic ("abandon"×11 + "about", empty passphrase) at BIP-84
@@ -28,21 +30,6 @@ fn bin() -> Command {
     let mut c = Command::cargo_bin("mnemonic").expect("binary built");
     c.arg("--allow-argv-secret");
     c
-}
-
-/// Assert exit 2 + the canonical `NetworkMismatch` stderr message.
-fn assert_mismatch(out: &std::process::Output, who: &str) {
-    assert_eq!(
-        out.status.code(),
-        Some(2),
-        "{who}: must exit 2 (NetworkMismatch); stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert!(
-        String::from_utf8_lossy(&out.stderr).contains("network mismatch"),
-        "{who}: expected the network-mismatch message; stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
 }
 
 /// The network rule (Spec A): exit 8, stdout empty, stderr exactly `want`.
@@ -365,7 +352,15 @@ fn e3a_testnet_tprv_mainnet_network_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "E3a silent-payment xprv/tprv master");
+    // Spec B unit 8b: TX-H1, exit 8.
+    assert_rule(
+        &out,
+        "E3a silent-payment xprv/tprv master",
+        &[
+            "warning: secret material on argv (--secret) — pipe via --secret-stdin to avoid /proc/$PID/cmdline exposure",
+            "error: network mismatch: --secret is a test-network key (tprv), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet.",
+        ],
+    );
     assert!(
         !String::from_utf8_lossy(&out.stdout).contains("sp1"),
         "no silent-payment address must be emitted: {:?}",

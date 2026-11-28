@@ -1,5 +1,6 @@
 //! cycle-5 S-NET (axis 2): the network-provenance cross-check at the
-//! convert + export sites (M14 / L11 / M13). All exit 2 (`NetworkMismatch`).
+//! convert + export sites (M14 / L11 / M13). Exit 2 (`NetworkMismatch`) until
+//! the network rule, exit 8 since (`NetworkMismatch` is deleted).
 //!
 //! - M14 `convert --xpub-prefix`: re-emitting an xpub into a `--network` family
 //!   that disagrees with the xpub's OWN version bytes.

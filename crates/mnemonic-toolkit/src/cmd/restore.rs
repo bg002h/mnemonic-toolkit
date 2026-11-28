@@ -1743,6 +1743,17 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     // seed is typed now (N6), so nothing else is a source.
     let mut sources = template_cosigner_sources(&args.cosigner);
     sources.extend(origin_expect_sources(args));
+    // Spec B unit 8b: a `--search-address` of another network than the run
+    // is TX-H3 (it replaces the address's `require_network` refusal).
+    if let Some(a) = args.search_address.as_deref() {
+        if let Some(net) = crate::network_rule::AddrNet::of_address(a.trim()) {
+            sources.push(crate::network_rule::Source::Address {
+                who: "--search-address".into(),
+                address: a.trim().to_string(),
+                net,
+            });
+        }
+    }
     network_check(args, sources, args.cosigner.is_empty(), stderr)?;
 
     // --- Floor 1(i): `--from` is REQUIRED + resolve the seed entropy ----------

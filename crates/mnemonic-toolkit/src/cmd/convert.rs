@@ -1241,16 +1241,8 @@ pub fn run<R: Read, W: Write, E: Write>(
                 if *node == NodeType::Xpub {
                     let xpub = bip32::Xpub::from_str(value)
                         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
-                    // cycle-5 S-NET (M14): the only existing guard requires
-                    // --network to be PRESENT (§5.a), not to AGREE with the
-                    // xpub's own version bytes. Re-emitting a tpub into a
-                    // mainnet `--network zpub` family would mint a wrong-network
-                    // artifact — refuse fail-closed before the prefix swap.
-                    crate::network::assert_network_agrees(
-                        xpub.network,
-                        network.network_kind(),
-                        "convert: --xpub-prefix",
-                    )?;
+                    // M14: the network rule (step 7.b) refused a key source
+                    // of another class than the run, so this xpub agrees.
                     *value = apply_xpub_prefix(&xpub, prefix, network);
                 }
             }
@@ -1695,28 +1687,17 @@ fn compute_outputs(
                     Xpub => xpub.to_string(),
                     Address => {
                         // SPEC v0.7 §10.a — derive child xpub at --path,
-                        // build address per --script-type. Network is
-                        // inferred from the xpub when --network is absent.
+                        // build address per --script-type, on the run
+                        // network.
                         let path_str = args.path.as_deref().ok_or_else(refusal_address_no_path)?;
                         let path = parse_literal_path(path_str)?;
                         let script_type = resolve_script_type(args)?;
                         let child = xpub
                             .derive_pub(&secp, &path)
                             .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
-                        // cycle-H F3: an explicit --network must agree with the
-                        // xpub's own version bytes; the inference arm (no
-                        // --network) stays unguarded (network.rs precondition).
-                        let net = match args.network {
-                            Some(n) => {
-                                crate::network::assert_network_agrees(
-                                    xpub.network,
-                                    n.network_kind(),
-                                    "convert: xpub→address",
-                                )?;
-                                n
-                            }
-                            None => crate::address_render::network_from_xpub(&xpub),
-                        };
+                        // The run network (D1): the network rule (step 7.b)
+                        // refused an xpub of another class.
+                        let net = network;
                         crate::address_render::render_address_from_xpub(
                             &secp,
                             &child,
@@ -1738,17 +1719,8 @@ fn compute_outputs(
         Wif => {
             let pk = PrivateKey::from_wif(value)
                 .map_err(|e| ToolkitError::BadInput(format!("--from wif parse: {e}")))?;
-            // cycle-5 S-NET (L11): a WIF carries its OWN network byte
-            // (`pk.network`); the sentinel xpub below was built from `--network`
-            // (default mainnet), silently discarding it — so a testnet WIF
-            // emitted a mainnet `xpub…`. Cross-check the WIF's true network
-            // against the asserted `--network` and refuse on disagreement (the
-            // user can pass the matching `--network` to get the intended prefix).
-            crate::network::assert_network_agrees(
-                pk.network,
-                network.network_kind(),
-                "convert: wif→xpub",
-            )?;
+            // L11: the network rule (step 7.b, TX-H5) refused a WIF of
+            // another class than the run, so the sentinel's network agrees.
             let pubkey = pk.public_key(&secp);
             let sentinel_xpub = bip32::Xpub {
                 network: network.network_kind(),
@@ -2008,9 +1980,9 @@ fn resolve_script_type(args: &ConvertArgs) -> Result<ScriptType, ToolkitError> {
     Err(refusal_address_no_script_type())
 }
 
-// `build_address_from_xpub` + `network_from_xpub` moved to `crate::address_render`
-// (de-duplicated with the former xpub-search copies). Call sites below use
-// `crate::address_render::{render_address_from_xpub, network_from_xpub}`.
+// `build_address_from_xpub` moved to `crate::address_render` (de-duplicated
+// with the former xpub-search copies); `network_from_xpub` was deleted with
+// the network rule (D1).
 
 // ============================================================================
 // SPEC v0.9.0 §1 item 1 — argv-leakage closure helpers

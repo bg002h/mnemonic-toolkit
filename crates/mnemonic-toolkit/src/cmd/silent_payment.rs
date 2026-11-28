@@ -131,6 +131,24 @@ fn resolve_master_xpriv<E: Write>(
                 xpriv.depth
             )));
         }
+        // The network rule (Spec B unit 8b, TX-H1): the master's own version
+        // against the run, before it drives coin_type()/sp_hrp(). The
+        // ms1/phrase/entropy branches below mint the master at the run's
+        // network (a seed typed now, N6).
+        let source = crate::network_rule::KeySource::from_text(
+            crate::network_rule::Who::plain("--secret"),
+            s,
+            vec![],
+        );
+        let input = crate::network_rule::Input::new(
+            crate::network_rule::RunNet::from_defaulted(network),
+            source
+                .map(crate::network_rule::Source::Key)
+                .into_iter()
+                .collect(),
+            crate::network_rule::Thing::Key,
+        );
+        crate::network_rule::enforce(&input, stderr)?;
         if !passphrase.is_empty() {
             writeln!(
                 stderr,
@@ -139,16 +157,6 @@ fn resolve_master_xpriv<E: Write>(
             )
             .map_err(ToolkitError::Io)?;
         }
-        // cycle-H F3: `--network` is always asserted here (non-Optional
-        // CliNetwork, default mainnet) — cross-check it against the xprv/tprv's
-        // OWN embedded network before it drives coin_type()/sp_hrp(). The
-        // ms1/phrase/entropy branches below mint the master AT `--network`
-        // (no embedded bytes to contradict) and stay unguarded.
-        crate::network::assert_network_agrees(
-            xpriv.network,
-            network.network_kind(),
-            "silent-payment: xprv/tprv master",
-        )?;
         return Ok(xpriv);
     }
     // 2. ms1 → entropy (unambiguous bech32 `ms` HRP). Case-insensitive

@@ -13,7 +13,7 @@ use bitcoin::secp256k1::Secp256k1;
 use clap::Args;
 use serde_json::json;
 
-use crate::address_render::{network_from_xpub, render_address_from_xpub};
+use crate::address_render::render_address_from_xpub;
 use crate::cmd::convert::read_stdin_to_string;
 use crate::cmd::convert::{parse_from_input, parse_script_type_arg, NodeType, ScriptType};
 use crate::derive_slot::derive_bip32_from_entropy;
@@ -51,8 +51,8 @@ pub struct AddressesArgs {
     #[arg(long, value_enum, default_value = "receive")]
     pub chain: ChainSel,
 
-    /// Network override. Defaults to the xpub's version bytes (xpub source) or
-    /// mainnet (seed source); must agree with an xpub's network kind.
+    /// Bitcoin network. Defaults to mainnet; an xpub of another class is
+    /// refused.
     #[arg(long, value_enum)]
     pub network: Option<CliNetwork>,
 
@@ -169,19 +169,22 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             let xpub = Xpub::from_str(&from_value)
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
-            let net = match args.network {
-                None => network_from_xpub(&xpub),
-                Some(n) => {
-                    if n.network_kind() != xpub.network {
-                        return Err(bad(format!(
-                            "--network {} disagrees with the xpub's network kind; refusing to render wrong-network addresses",
-                            n.human_name()
-                        )));
-                    }
-                    n
-                }
-            };
-            (xpub, net, None)
+            // The network rule (Spec B R8b.1, R8b.2): the run is `--network`
+            // or mainnet (D1); an xpub of the other class is refused (TX-H1).
+            let input = crate::network_rule::Input::new(
+                crate::network_rule::RunNet::from_opt(args.network),
+                crate::network_rule::KeySource::from_text(
+                    crate::network_rule::Who::plain("--from xpub"),
+                    from_value.trim(),
+                    vec![],
+                )
+                .map(crate::network_rule::Source::Key)
+                .into_iter()
+                .collect(),
+                crate::network_rule::Thing::Key,
+            );
+            crate::network_rule::enforce(&input, stderr)?;
+            (xpub, args.network.unwrap_or(CliNetwork::Mainnet), None)
         }
         NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr => {
             let language = args.language.unwrap_or_default();

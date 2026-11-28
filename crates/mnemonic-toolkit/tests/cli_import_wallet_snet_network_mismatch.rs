@@ -5,6 +5,8 @@
 //! / testnet `tpub`) contradict its own BIP-48 coin-type path is now rejected
 //! fail-closed (`NetworkMismatch`, exit 2). This is axis 2 — distinct from the
 //! H9 `--network`-vs-coin-type-class axis (exit 1, `ImportWalletNetworkClassMismatch`).
+//! Since the network rule (Spec B unit 3) both helpers and both variants are
+//! gone: the contradiction is TX-S (key form), exit 8.
 //!
 //! Each parser gets (a) a RED test that exits 2 (silently accepted pre-fix) and
 //! (b) a positive control proving a network-CONSISTENT input still imports

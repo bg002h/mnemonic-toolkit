@@ -866,3 +866,19 @@ deviations from the plan's text. Each is listed for the whole-diff review.
   input on a test run ends with TX-R (`bh_tk_mn7_dice_long_child_streams_byte_identical`).
 - **Unit 8a: RED check.** With src stashed, the 17 `nr8a_*` tests of
   `cli_network_rule_rest.rs` fail.
+- **Unit 8b: silent-payment `<who>`.** Spec A §3's `<who>` list has no
+  silent-payment entry; the key is named `--secret` (its flag), also when
+  read with `--secret-file`/`--secret-stdin`. The check sits after the
+  depth-0 refusal (a shape refusal) and before the passphrase advisory.
+- **Unit 8b: `CosignerSpec` in `synthesize.rs` stays** as a library
+  invariant: every CLI path to it (bundle and verify-bundle `--slot
+  @N.xpub=`) is refused first by the 8a check (TX-H1), so it is unreachable
+  from `mnemonic`; it is not reworded.
+- **Unit 8b: `network_from_xpub` deleted** (`address_render.rs`): after
+  addresses and convert run on `--network` or mainnet it had no caller.
+- **Unit 8b: restore `--search-address`** is an Address source in multisig
+  template completion's check (TX-H3, also a `tb1` address on regtest). The
+  `require_network` refusal after it stays as a backstop the rule makes
+  unreachable for a parseable address.
+- **Unit 8b: RED check.** With src at the unit-8a commit, both `nr8b_*`
+  tests fail (addresses still infers and exits 1).

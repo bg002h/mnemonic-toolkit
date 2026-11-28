@@ -1,15 +1,16 @@
-//! Shared address rendering + network inference for `convert`, `xpub-search`,
-//! and `addresses`. De-duplicates the previously-private copies that lived
-//! verbatim in each (`convert.rs::build_address_from_xpub` /
-//! `xpub_search/address_search.rs::render_address`; `convert.rs::network_from_xpub`
-//! / `xpub_search/address_of_xpub.rs::network_from_xpub`).
+//! Shared address rendering for `convert`, `xpub-search`, and `addresses`.
+//! De-duplicates the previously-private copies that lived verbatim in each
+//! (`convert.rs::build_address_from_xpub` /
+//! `xpub_search/address_search.rs::render_address`). The network an address
+//! is rendered on is the run's (the network rule, D1); nothing infers it
+//! from an xpub.
 //!
 //! Bin module (imports `cmd::convert::ScriptType` + `network::CliNetwork`, which
 //! are bin-only).
 
 use bitcoin::bip32::Xpub;
 use bitcoin::secp256k1::{Secp256k1, Verification};
-use bitcoin::{Address, NetworkKind};
+use bitcoin::Address;
 
 use crate::cmd::convert::ScriptType;
 use crate::network::CliNetwork;
@@ -33,16 +34,6 @@ pub(crate) fn render_address_from_xpub<C: Verification>(
     }
 }
 
-/// Infer `CliNetwork` from an xpub's version bytes. `NetworkKind::Test` collapses
-/// testnet / signet / regtest into `Testnet` (the bech32 HRP `tb1...` is shared;
-/// signet/regtest disambiguation is not encoded in the version-byte prefix).
-pub(crate) fn network_from_xpub(xpub: &Xpub) -> CliNetwork {
-    match xpub.network {
-        NetworkKind::Main => CliNetwork::Mainnet,
-        NetworkKind::Test => CliNetwork::Testnet,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -52,7 +43,7 @@ mod tests {
     const ACCT_84: &str = "xpub6BmeGmRo4LosAcU21HDaGcvtaQ7GrqQcY48nBkE22qM6KVwQUjRJ1BGzk84SFVHgLcd61Vcnhr8petHexjjn5WbQ9PriVrRhphw4oCp2z6a";
 
     #[test]
-    fn render_all_four_types_and_network_infer() {
+    fn render_all_four_types() {
         let secp = Secp256k1::verification_only();
         let xpub = Xpub::from_str(ACCT_84).unwrap();
         let child = xpub
@@ -80,6 +71,5 @@ mod tests {
             CliNetwork::Mainnet
         )
         .starts_with('3'));
-        assert_eq!(network_from_xpub(&xpub), CliNetwork::Mainnet);
     }
 }

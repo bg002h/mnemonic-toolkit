@@ -846,3 +846,249 @@ fn nr8a_verify_bundle_cause_line() {
         err(&o)
     );
 }
+
+#[test]
+fn nr8a_bundle_import_json_contradicts_itself() {
+    // Plan unit 8a (I-7): the envelope's TX-H4C and TX-S at bundle
+    // --import-json, as export-wallet --from-import-json (R1.19, R1.21).
+    assert_refused(
+        &run(&["bundle", "--import-json", "env_xt.json", "--network", "testnet"]),
+        &["error: network mismatch: env_xt.json says testnet, but its bundle.descriptor key is a mainnet key (xpub). Nothing was written. No --network repairs a file that contradicts itself: export the file again from the signer with its network set for the wallet's network."],
+    );
+    let a = [
+        "bundle",
+        "--import-json",
+        "env_x_c1.json",
+        "--network",
+        "mainnet",
+    ];
+    assert_refused(
+        &run(&a),
+        &["error: network mismatch (coin type): key @0's path m/84h/1h/0h is a test-network path (coin type 1h), but key @0 is a mainnet key (xpub). Nothing was written. If the path is a mistake, export the key again at the mainnet path (coin type 0h). To use this key as it is, add --accept-coin-type-mismatch: the output is then for mainnet and this warning is printed every time."],
+    );
+    let mut b = a.to_vec();
+    b.push("--accept-coin-type-mismatch");
+    let o = run(&b);
+    assert_eq!(o.status.code(), Some(0), "{}", err(&o));
+    assert!(out(&o).contains("mk1"), "{}", out(&o));
+    assert!(
+        stderr_has(&o, "warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: key @0's path m/84h/1h/0h is a test-network path; the output is for mainnet. A signer or recovery tool that looks only at mainnet paths will not find coins sent here."),
+        "{}",
+        err(&o)
+    );
+}
+
+#[test]
+fn nr8b_inferring_arms_refuse_without_flag() {
+    // R8b.1
+    let from = format!("xpub={T}");
+    assert_refused(
+        &run(&[
+            "addresses",
+            "--from",
+            &from,
+            "--count",
+            "1",
+            "--address-type",
+            "p2wpkh",
+        ]),
+        &[&h1_test("--from xpub", NOFLAG)],
+    );
+    // R8b.4
+    assert_refused(
+        &run(&[
+            "convert",
+            "--from",
+            &from,
+            "--to",
+            "address",
+            "--script-type",
+            "p2wpkh",
+            "--path",
+            "m/0/0",
+        ]),
+        &[&h1_test("--from xpub", NOFLAG)],
+    );
+    // A test key on its own network is unchanged.
+    let o = run(&[
+        "addresses",
+        "--from",
+        &from,
+        "--count",
+        "1",
+        "--address-type",
+        "p2wpkh",
+        "--network",
+        "testnet",
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{}", err(&o));
+    assert!(out(&o).contains("tb1q6rz28mc"), "{}", out(&o));
+}
+
+#[test]
+fn nr8b_existing_refusals_exit_8_one_wording() {
+    const MAIN: &str = "--network is mainnet";
+    let from = format!("xpub={T}");
+    // R8b.2: addresses with --network (was exit 1).
+    assert_refused(
+        &run(&[
+            "addresses",
+            "--from",
+            &from,
+            "--count",
+            "1",
+            "--address-type",
+            "p2wpkh",
+            "--network",
+            "mainnet",
+        ]),
+        &[&h1_test("--from xpub", MAIN)],
+    );
+    // convert --xpub-prefix (was exit 2).
+    assert_refused(
+        &run(&[
+            "convert",
+            "--from",
+            &from,
+            "--to",
+            "xpub",
+            "--xpub-prefix",
+            "zpub",
+            "--network",
+            "mainnet",
+        ]),
+        &[&h1_test("--from xpub", MAIN)],
+    );
+    // convert wif->xpub (was exit 2): TX-H5.
+    let wif = format!("wif={WIF_T}");
+    let o = run(&[
+        "convert",
+        "--from",
+        &wif,
+        "--to",
+        "xpub",
+        "--network",
+        "mainnet",
+        "--allow-argv-secret",
+    ]);
+    assert_eq!(o.status.code(), Some(8), "{}", err(&o));
+    assert!(o.stdout.is_empty(), "{}", out(&o));
+    assert_eq!(
+        last_stderr_line(&o),
+        "error: network mismatch: the WIF key is a test-network key (version byte 239), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet."
+    );
+    // bundle --slot @N.xpub= (was CosignerSpec, exit 1).
+    let slot = format!("@0.xpub={T}");
+    assert_refused(
+        &run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            &slot,
+            "--slot",
+            "@0.fingerprint=73c5da0a",
+        ]),
+        &[&h1_test("--slot @0.xpub", MAIN)],
+    );
+    // bundle --import-json (was BadInput, exit 1): TX-H4.
+    assert_refused(
+        &run(&["bundle", "--import-json", "env_t.json", "--network", "mainnet"]),
+        &["error: network mismatch: env_t.json says network testnet, but --network is mainnet. Nothing was written. Rerun with --network testnet, or use the file made for mainnet."],
+    );
+    // silent-payment (was exit 2).
+    let o = run(&[
+        "silent-payment",
+        "--secret",
+        TPRV,
+        "--network",
+        "mainnet",
+        "--allow-argv-secret",
+    ]);
+    assert_eq!(o.status.code(), Some(8), "{}", err(&o));
+    assert!(o.stdout.is_empty(), "{}", out(&o));
+    assert_eq!(
+        last_stderr_line(&o),
+        "error: network mismatch: --secret is a test-network key (tprv), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet."
+    );
+    // verify-bundle watch-only slot (was exit 1): merged with the mk1 card
+    // of the same class (B5).
+    let text = fx_text("vb_signet_bip84.txt");
+    let mut a: Vec<String> = [
+        "verify-bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "bip84",
+        "--slot",
+        &slot,
+        "--slot",
+        "@0.fingerprint=73c5da0a",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    for l in text
+        .lines()
+        .filter(|l| l.starts_with("mk1") || l.starts_with("md1"))
+    {
+        a.extend([format!("--{}", &l[..3]), l.to_string()]);
+    }
+    assert_refused(
+        &run_s(&a),
+        &["error: network mismatch: the mk1 card and --slot @0.xpub are test-network keys (tpub), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet."],
+    );
+    // restore --search-address, multisig template completion (was exit 1):
+    // TX-H3.
+    let k0 = "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf";
+    let k1 = "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk";
+    let mut b: Vec<String> = [
+        "bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "wsh-sortedmulti",
+        "--threshold",
+        "2",
+        "--md1-form",
+        "template",
+        "--group-size",
+        "0",
+        "--no-engraving-card",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    for (i, k) in [k0, k1].iter().enumerate() {
+        b.extend([
+            "--slot".into(),
+            format!("@{i}.xpub={k}"),
+            "--slot".into(),
+            format!("@{i}.fingerprint=73c5da0a"),
+            "--slot".into(),
+            format!("@{i}.path=m/48h/0h/{i}h/2h"),
+        ]);
+    }
+    let o = run_s(&b);
+    assert_eq!(o.status.code(), Some(0), "{}", err(&o));
+    let mut r: Vec<String> = vec!["restore".into()];
+    for l in out(&o).lines().filter(|l| l.starts_with("md1")) {
+        r.extend(["--md1".into(), l.to_string()]);
+    }
+    r.extend([
+        "--from".into(),
+        phrase(),
+        "--allow-argv-secret".into(),
+        "--search-address".into(),
+        "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl".into(),
+    ]);
+    let o = run_s(&r);
+    assert_eq!(o.status.code(), Some(8), "{}", err(&o));
+    assert!(o.stdout.is_empty(), "{}", out(&o));
+    assert_eq!(
+        last_stderr_line(&o),
+        "error: network mismatch: --search-address tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl is a signet or testnet address, but this run is on mainnet (no --network given). Nothing was written. Rerun with --network signet or --network testnet, or give an address of mainnet."
+    );
+}

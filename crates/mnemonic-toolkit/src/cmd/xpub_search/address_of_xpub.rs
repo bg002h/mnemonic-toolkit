@@ -59,10 +59,8 @@ pub struct AddressOfXpubArgs {
     #[arg(long, value_name = "TYPE", value_parser = parse_script_type_arg)]
     pub address_type: Option<ScriptType>,
 
-    /// Network selector. Defaults to network inferred from the xpub version
-    /// byte (mainnet ↔ xpub/ypub/Ypub/zpub/Zpub; testnet ↔ tpub/upub/Upub/
-    /// vpub/Vpub). `--network signet` or `--network regtest` overrides for
-    /// disambiguation (the version byte collapses test/signet/regtest).
+    /// Network selector. Defaults to mainnet; an xpub of another class is
+    /// refused.
     #[arg(long)]
     pub network: Option<CliNetwork>,
 
@@ -381,4 +379,5 @@ fn detect_multisig_prefix(s: &str) -> Option<&'static str> {
     }
 }
 
-// `network_from_xpub` moved to `crate::address_render` (de-duplicated).
+// `network_from_xpub` was deleted with the network rule (D1: the run is
+// `--network` or mainnet).

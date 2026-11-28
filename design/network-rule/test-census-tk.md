@@ -186,3 +186,15 @@ plan §3 unit 3 table):
   (pass `--network testnet`; the long-child leg ends with TX-R, N12).
 - Not on the list, explained by N12/T6: stdout_write_errors.rs::r4_bundle_dev_full_exits_1
   (TX-R moved before the write-error line; the test is unchanged).
+
+## Changed at unit 8b (toolkit part)
+
+- cli_addresses.rs::network_infer_override_and_mismatch (on the list): the no-flag leg is
+  refused (exit 0 -> 8, TX-H1, R8b.1), the mainnet leg exit 1 -> 8 (R8b.2); the testnet and
+  regtest legs pass the flag.
+- cli_network_fail_open.rs::e3a_testnet_tprv_mainnet_network_rejects: exit 2 -> 8, TX-H1
+  (`--secret`); `assert_mismatch` is deleted with `NetworkMismatch`.
+- src unit tests deleted with the code they pinned: network.rs
+  `network_kind_name_renders_two_families`, `assert_network_agrees_*` (3); error.rs's
+  `NetworkMismatch` exit-code assertion; address_render.rs's `network_from_xpub` assertion
+  (the test is renamed `render_all_four_types`).

@@ -237,17 +237,13 @@ fn chain_both_grouped_receive_then_change() {
 
 #[test]
 fn network_infer_override_and_mismatch() {
-    assert!(stdout(&mn(&[
-        "addresses",
-        "--from",
-        &format!("xpub={V15_84_TEST}"),
-        "--address-type",
-        "p2wpkh",
-        "--count",
-        "1"
-    ]))
-    .contains("tb1q"));
-    assert!(stdout(&mn(&[
+    // Spec B unit 8b (R8b.1, R8b.2): nothing infers the network from the
+    // xpub; the run is --network or mainnet, and a test xpub on a main run
+    // is refused (exit 8, TX-H1), with or without --network.
+    let h1 = |run: &str| {
+        format!("error: network mismatch: --from xpub is a test-network key (tpub), but {run}. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet.")
+    };
+    let base = [
         "addresses",
         "--from",
         &format!("xpub={V15_84_TEST}"),
@@ -255,22 +251,24 @@ fn network_infer_override_and_mismatch() {
         "p2wpkh",
         "--count",
         "1",
-        "--network",
-        "regtest"
-    ]))
-    .contains("bcrt1q"));
-    assert_eq!(
-        code(&mn(&[
-            "addresses",
-            "--from",
-            &format!("xpub={V15_84_TEST}"),
-            "--address-type",
-            "p2wpkh",
-            "--network",
-            "mainnet"
-        ])),
-        1
-    );
+    ]
+    .map(|s| s.to_string());
+    let with = |extra: &[&str]| {
+        let mut a: Vec<&str> = base.iter().map(String::as_str).collect();
+        a.extend_from_slice(extra);
+        mn(&a)
+    };
+    for (extra, run) in [
+        (&[][..], "this run is on mainnet (no --network given)"),
+        (&["--network", "mainnet"][..], "--network is mainnet"),
+    ] {
+        let o = with(extra);
+        assert_eq!(code(&o), 8, "{}", stderr(&o));
+        assert!(o.stdout.is_empty(), "{}", stdout(&o));
+        assert_eq!(stderr(&o).lines().collect::<Vec<_>>(), [h1(run)]);
+    }
+    assert!(stdout(&with(&["--network", "testnet"])).contains("tb1q"));
+    assert!(stdout(&with(&["--network", "regtest"])).contains("bcrt1q"));
 }
 
 #[test]
