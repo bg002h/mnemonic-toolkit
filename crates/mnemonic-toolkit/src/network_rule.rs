@@ -1795,3 +1795,72 @@ mod tests {
         );
     }
 }
+
+/// The sources of `--slot @N.<subkey>=` inputs (export-wallet, bundle), in
+/// slot order: `@N.xpub` and `@N.master_xpub` are keys (prefix as typed), a
+/// typed `@N.path` is a coin on the slot's xpub (key form) or, for a seed
+/// slot, a coin with no key (run form); `@N.wif` is a WIF. A path the slot
+/// does not type is no source (B1). Values read from stdin (`-`) and values
+/// that do not parse are left to the verb's own checks.
+pub(crate) fn slot_sources(slots: &[crate::slot_input::SlotInput]) -> Vec<Source> {
+    use crate::slot_input::SlotSubkey as K;
+    use std::str::FromStr;
+    let mut indices: Vec<u8> = slots.iter().map(|s| s.index).collect();
+    indices.sort_unstable();
+    indices.dedup();
+    let mut out = Vec::new();
+    for idx in indices {
+        let get = |k: K| -> Option<&str> {
+            slots
+                .iter()
+                .find(|s| s.index == idx && s.subkey == k)
+                .map(|s| &*s.value)
+                .filter(|v| *v != "-")
+        };
+        let flag = format!("--slot @{idx}.path");
+        let coin = get(K::Path)
+            .and_then(|p| bitcoin::bip32::DerivationPath::from_str(p).ok())
+            .and_then(|p| key_coin(PathWho::Flag(flag.clone()), &p));
+        let mut coin_used = false;
+        for (k, name) in [(K::Xpub, "xpub"), (K::Xprv, "xprv")] {
+            if let Some(v) = get(k) {
+                let coins: Vec<KeyCoin> = coin.clone().into_iter().collect();
+                coin_used = true;
+                if let Some(ks) =
+                    KeySource::from_text(Who::plain(format!("--slot @{idx}.{name}")), v, coins)
+                {
+                    out.push(Source::Key(ks));
+                }
+            }
+        }
+        if let Some(v) = get(K::MasterXpub) {
+            if let Some(ks) =
+                KeySource::from_text(Who::plain(format!("--slot @{idx}.master_xpub")), v, vec![])
+            {
+                out.push(Source::Key(ks));
+            }
+        }
+        if let Some(v) = get(K::Wif) {
+            // Only the version byte is kept; the decoded buffer is scrubbed.
+            if let Ok(data) = bitcoin::base58::decode_check(v).map(zeroize::Zeroizing::new) {
+                match data.first() {
+                    Some(128) => out.push(Source::Wif {
+                        class: Class::Main,
+                        version: 128,
+                    }),
+                    Some(239) => out.push(Source::Wif {
+                        class: Class::Test,
+                        version: 239,
+                    }),
+                    _ => {}
+                }
+            }
+        }
+        if !coin_used {
+            if let Some(c) = coin {
+                out.push(Source::Coin(c));
+            }
+        }
+    }
+    out
+}

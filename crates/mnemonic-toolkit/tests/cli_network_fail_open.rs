@@ -45,6 +45,22 @@ fn assert_mismatch(out: &std::process::Output, who: &str) {
     );
 }
 
+/// The network rule (Spec A): exit 8, stdout empty, stderr exactly `want`.
+#[track_caller]
+fn assert_rule(out: &std::process::Output, who: &str, want: &[&str]) {
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(8),
+        "{who}: must exit 8; stderr: {stderr}"
+    );
+    assert!(out.stdout.is_empty(), "{who}: stdout must be empty");
+    assert_eq!(stderr.lines().collect::<Vec<_>>(), want, "{who}");
+}
+
+/// TX-H1 for `key @0`, the test tpub, on a run with no `--network` (Spec A §3).
+const H1_KEY0_TPUB_NOFLAG: &str = "error: network mismatch: key @0 is a test-network key (tpub), but this run is on mainnet (no --network given). Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet.";
+
 // ---------------------------------------------------------------------------
 // Test vectors — all derived from the standard "abandon"×11 + "about" BIP-39
 // test mnemonic (empty passphrase), BIP-84 single-sig, account 0. Verified at
@@ -420,7 +436,8 @@ fn e4a_template_slot_testnet_xpub_default_mainnet_network_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "E4a export-wallet --template/--slot");
+    // Spec A R1.12: TX-H1, exit 8.
+    assert_rule(&out, "E4a export-wallet --template/--slot", &["error: network mismatch: --slot @0.xpub is a test-network key (tpub), but this run is on mainnet (no --network given). Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet."]);
     assert!(
         !String::from_utf8_lossy(&out.stdout).contains("zpub"),
         "no mainnet zpub must be minted: {:?}",
@@ -491,8 +508,8 @@ fn e4c_template_slot_mainnet_xpub_default_network_ok() {
 
 #[test]
 fn e4d_descriptor_concrete_passthrough_ok() {
-    // Guard-inert pin: --descriptor's resolved_slots is empty, so the loop is
-    // a no-op; --format descriptor re-emits verbatim regardless of --network.
+    // Spec A unit 1 flips this pin: a test key with no --network (D1: mainnet)
+    // is refused on every format, --format descriptor included.
     let out = bin()
         .args([
             "export-wallet",
@@ -505,13 +522,11 @@ fn e4d_descriptor_concrete_passthrough_ok() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
+    assert_rule(
+        &out,
+        "E4d --descriptor --format descriptor",
+        &[H1_KEY0_TPUB_NOFLAG],
     );
-    assert!(String::from_utf8_lossy(&out.stdout).contains(TESTNET_TPUB));
 }
 
 #[test]
@@ -535,7 +550,11 @@ fn e4_minor_master_xpub_slot_testnet_default_mainnet_network_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "E4 master_xpub slot cross-check");
+    // Spec A R1.20: TX-H2, then TX-H1 without its rerun sentence.
+    assert_rule(&out, "E4 master_xpub slot cross-check", &[
+        "error: network mismatch: --slot @0.xpub is a mainnet key (xpub), but --slot @0.master_xpub is a test-network key (tpub). Nothing was written. Every key of one wallet is for one network: export the odd key again.",
+        "error: network mismatch: --slot @0.master_xpub is a test-network key (tpub), but this run is on mainnet (no --network given). Nothing was written. For a mainnet wallet, export the key again with the signer set to mainnet.",
+    ]);
 }
 
 // ===========================================================================
@@ -559,7 +578,12 @@ fn e5a_descriptor_testnet_tpub_default_mainnet_bsms_4line_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "E5a export-wallet --descriptor --format bsms 4-line");
+    // The network rule refuses before any format renders (Spec A unit 1).
+    assert_rule(
+        &out,
+        "E5a export-wallet --descriptor --format bsms 4-line",
+        &[H1_KEY0_TPUB_NOFLAG],
+    );
     assert!(
         !String::from_utf8_lossy(&out.stdout).contains("bc1q"),
         "no mainnet address line must be emitted: {:?}",
@@ -597,7 +621,8 @@ fn e5b_descriptor_testnet_tpub_explicit_testnet_bsms_4line_ok() {
 
 #[test]
 fn e5c_descriptor_testnet_tpub_default_mainnet_bsms_2line_ok() {
-    // No line-4 mint in the 2-line lenient excerpt — verbatim descriptor only.
+    // Spec A unit 1: the 2-line excerpt mints no address, but the rule runs
+    // before every format, so a test key with no --network is refused here too.
     let out = bin()
         .args([
             "export-wallet",
@@ -612,15 +637,7 @@ fn e5c_descriptor_testnet_tpub_default_mainnet_bsms_2line_ok() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let lines: Vec<&str> = stdout.trim_end_matches('\n').split('\n').collect();
-    assert_eq!(lines.len(), 2, "expected 2 lines: {stdout}");
+    assert_rule(&out, "E5c bsms 2-line", &[H1_KEY0_TPUB_NOFLAG]);
 }
 
 #[test]
@@ -667,7 +684,11 @@ fn e5e_multipath_testnet_tpub_default_mainnet_bsms_4line_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "E5e multipath descriptor bsms 4-line");
+    assert_rule(
+        &out,
+        "E5e multipath descriptor bsms 4-line",
+        &[H1_KEY0_TPUB_NOFLAG],
+    );
 }
 
 #[test]

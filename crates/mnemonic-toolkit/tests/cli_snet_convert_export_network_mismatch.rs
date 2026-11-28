@@ -164,7 +164,18 @@ fn m13_mainnet_label_testnet_keys_envelope_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "M13 export --from-import-json");
+    // Spec A R1.21: the envelope contradicts itself: TX-H4C only, exit 8.
+    assert_eq!(
+        out.status.code(),
+        Some(8),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr).lines().collect::<Vec<_>>(),
+        ["error: network mismatch: tests/fixtures/wallet_import/snet-envelope-mainnet-label-testnet-keys.json says mainnet, but its bundle.descriptor key is a test-network key (tpub). Nothing was written. No --network repairs a file that contradicts itself: export the file again from the signer with its network set for the wallet's network."]
+    );
 }
 
 #[test]
@@ -176,6 +187,9 @@ fn m13_consistent_testnet_envelope_ok() {
             fixture("snet-envelope-testnet-consistent.json")
                 .to_str()
                 .unwrap(),
+            // Spec A R1.13: the run network is --network, no longer the envelope's.
+            "--network",
+            "testnet",
             "--format",
             "descriptor",
         ])

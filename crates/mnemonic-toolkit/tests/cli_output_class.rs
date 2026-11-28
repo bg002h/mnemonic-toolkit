@@ -161,7 +161,9 @@ fn export_wallet_emits_watch_only() {
         .args([
             "export-wallet",
             "--descriptor",
-            "wpkh([704c7836/84h/0h/0h]tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*)",
+            // A test key at a coin-1 origin: a coin-0 origin under a tpub is a
+            // network contradiction (Spec A R1.5), not what this pins.
+            "wpkh([704c7836/84h/1h/0h]tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*)",
             "--network",
             "testnet",
         ])

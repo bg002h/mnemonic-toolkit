@@ -90,6 +90,19 @@ fn write(dir: &Path, name: &str, v: &Value) -> PathBuf {
     p
 }
 
+/// The network rule (Spec A R1.13): the run network is `--network` (default
+/// mainnet) and an envelope of another network is refused, so the export
+/// passes the envelope's own `bundle.network`, as a user does.
+fn envelope_network(env: &Path) -> String {
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(env).unwrap()).unwrap();
+    let e = if v.is_array() { &v[0] } else { &v };
+    e["bundle"]["network"]
+        .as_str()
+        .unwrap_or("mainnet")
+        .to_string()
+}
+
 fn export(env: &Path, format: &str) -> std::process::Output {
     Command::cargo_bin("mnemonic")
         .unwrap()
@@ -97,6 +110,8 @@ fn export(env: &Path, format: &str) -> std::process::Output {
             "export-wallet",
             "--from-import-json",
             env.to_str().unwrap(),
+            "--network",
+            &envelope_network(env),
             "--format",
             format,
         ])

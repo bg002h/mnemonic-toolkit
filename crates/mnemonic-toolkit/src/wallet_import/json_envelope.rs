@@ -413,6 +413,46 @@ pub(crate) fn mk1_card_to_resolved_slot<E: std::io::Write>(
 /// writes `bundle.network` as one of "mainnet" / "testnet" / "signet" /
 /// "regtest" / "unknown" (the "unknown" case never round-trips). Phase 5
 /// rejects unknown strings as `BadInput`.
+/// The network rule's source for an envelope (Spec A §4.1 `--from-import-json`
+/// rows; also `bundle --import-json`, plan I-7): a stated network
+/// (`bundle.network`, exact grain) that owns the keys of `bundle.descriptor`
+/// (`<section>` `bundle.descriptor`, `<who>` `key @i`, `<device>` `signer`).
+/// `None` when the envelope names no network the toolkit knows (its own
+/// parse refuses that).
+pub(crate) fn envelope_source(
+    file: &str,
+    envelope: &ImportJsonEnvelope,
+) -> Option<crate::network_rule::Source> {
+    use crate::network_rule::{SectionKey, Source, StatedNet};
+    let net = cli_network_from_str(&envelope.bundle.network).ok()?;
+    let mut keys = Vec::new();
+    if let Some(desc) = envelope.bundle.descriptor.as_deref() {
+        let body = desc.split('#').next().unwrap_or(desc);
+        let expanded = crate::parse_descriptor::expand_literal_double_star(body);
+        if let Ok(d) = crate::parse_descriptor::parse_descriptor_lenient(expanded.as_ref()) {
+            for src in crate::network_rule::descriptor_sources(expanded.as_ref(), &d) {
+                if let Source::Key(key) = src {
+                    keys.push(SectionKey {
+                        section: "bundle.descriptor".into(),
+                        key,
+                    });
+                }
+            }
+        }
+    }
+    Some(Source::Stated {
+        file: if file == "-" {
+            "the envelope on stdin".into()
+        } else {
+            file.into()
+        },
+        text: envelope.bundle.network.clone(),
+        net: StatedNet::Exact(net),
+        device: crate::network_rule::Device::Signer,
+        keys,
+    })
+}
+
 pub(crate) fn cli_network_from_str(s: &str) -> Result<CliNetwork, ToolkitError> {
     match s {
         "mainnet" => Ok(CliNetwork::Mainnet),

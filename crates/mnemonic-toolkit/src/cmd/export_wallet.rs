@@ -400,8 +400,9 @@ pub struct ExportWalletArgs {
     /// `--descriptor`. Accepts a file path or `-` to read the envelope
     /// from stdin. The envelope's `bundle.descriptor` becomes the
     /// canonical descriptor for the emitter; cosigner xpubs decode
-    /// from `bundle.mk1` per SPEC §3.6.1; network derives from
-    /// `bundle.network`. Mutually exclusive with `--template` and
+    /// from `bundle.mk1` per SPEC §3.6.1; the run's network is
+    /// `--network` (default mainnet), and an envelope whose
+    /// `bundle.network` differs is refused. Mutually exclusive with `--template` and
     /// `--descriptor`. `--account` is rejected (the envelope's
     /// `bundle.account` value applies; the account is encoded in the
     /// descriptor's origin paths).
@@ -438,6 +439,26 @@ pub struct ExportWalletArgs {
     /// for inspection, archival and parity, not to unblock an import.
     #[arg(long, value_enum)]
     pub allow: Vec<CliAllow>,
+
+    /// Go on when an origin path's coin type (0h or 1h) disagrees with its key or the network; the output is for the run's network, every path is kept as written, and a warning is printed each time.
+    #[arg(long = "accept-coin-type-mismatch")]
+    pub accept_coin_type_mismatch: bool,
+}
+
+/// The network rule for one export-wallet arm (Spec A unit 1).
+fn network_check<E: Write>(
+    args: &ExportWalletArgs,
+    sources: Vec<crate::network_rule::Source>,
+    thing: crate::network_rule::Thing,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let mut input = crate::network_rule::Input::new(
+        crate::network_rule::RunNet::from_defaulted(args.network),
+        sources,
+        thing,
+    );
+    input.accept_coin_type = args.accept_coin_type_mismatch;
+    crate::network_rule::enforce(&input, stderr)
 }
 
 /// SPEC v0.8 §7 parser: `nums` or `@N` (decimal index).
@@ -621,6 +642,14 @@ pub fn run<W: Write, E: Write>(
         let d = parse_descriptor_lenient(expanded_desc.as_ref()).map_err(|e| {
             ToolkitError::DescriptorParse(format!("export-wallet --descriptor: {e}"))
         })?;
+        // The network rule (Spec A unit 1): every key and origin coin type
+        // against the run, before any format renders.
+        network_check(
+            args,
+            crate::network_rule::descriptor_sources(expanded_desc.as_ref(), &d),
+            crate::network_rule::Thing::Descriptor,
+            stderr,
+        )?;
         let adv = crate::timelock_advisory::older_advisories_descriptor(&d);
         crate::timelock_advisory::emit_advisories(&adv, stderr);
         d.to_string()
@@ -634,6 +663,14 @@ pub fn run<W: Write, E: Write>(
         {
             let _ = writeln!(stderr, "{w}");
         }
+        // The network rule (Spec A unit 1, Spec B R8a.11): each slot's key
+        // and a typed `@N.path` coin type against the run, before resolution.
+        network_check(
+            args,
+            crate::network_rule::slot_sources(&args.slot),
+            crate::network_rule::Thing::Key,
+            stderr,
+        )?;
         // Resolve slots through the shared bundle helper. Watch-only-only at
         // this point — phrase/entropy/xprv/wif rejected by validate_watch_only.
         let (resolved, _slip0132_signals) = crate::cmd::bundle::resolve_slots(
@@ -769,29 +806,6 @@ pub fn run<W: Write, E: Write>(
     // ResolvedSlot retains them for future per-cosigner needs).
     let master_xpub_at_0 = resolved_slots_ref.first().and_then(|s| s.master_xpub);
 
-    // cycle-H F3 (R0-Important-1): the `--template`/`--slot` path resolves
-    // slots via `resolve_slots` but — unlike the `--from-import-json` arm's
-    // guard just above `envelope_to_resolved_slots` — never cross-checked each
-    // slot's xpub network against the asserted `--network` (which fires on
-    // the clap DEFAULT, no explicit flag needed) before the electrum/coldcard
-    // emitters rewrite the xpub's version bytes via `apply_xpub_prefix`. Fail
-    // closed BEFORE any re-emit. Inert (empty `resolved_slots_ref`) for the
-    // `--descriptor` concrete-keys arm — no over-rejection there.
-    for slot in resolved_slots_ref {
-        crate::network::assert_network_agrees(
-            slot.xpub.network,
-            args.network.network_kind(),
-            "export: --template/--slot",
-        )?;
-        if let Some(mx) = slot.master_xpub {
-            crate::network::assert_network_agrees(
-                mx.network,
-                args.network.network_kind(),
-                "export: --template/--slot master_xpub",
-            )?;
-        }
-    }
-
     // ---- ADMISSION GATE 1 of 2 (PLAN Phase 1, topology (B)) ---------------
     // Runs on THIS arm's canonical descriptor, immediately before `EmitInputs`,
     // honouring the `AllowSet`. Uniform across wrappers and arms: the
@@ -890,6 +904,19 @@ fn run_from_import_json<W: Write, E: Write>(
     let envelope =
         parse_import_json_envelopes(&raw, args.from_import_json_index, "--from-import-json")?;
 
+    // The network rule (Spec A unit 1, R1.13-R1.21): the envelope's stated
+    // network against its own keys (TX-H4C) and against the run (TX-H4); its
+    // keys' origin coin types against their keys (TX-S). The run is
+    // `--network` (or mainnet): the envelope no longer decides it.
+    if let Some(src) = crate::wallet_import::json_envelope::envelope_source(value, &envelope) {
+        network_check(
+            args,
+            vec![src],
+            crate::network_rule::Thing::Descriptor,
+            stderr,
+        )?;
+    }
+
     let descriptor_with_csum = envelope.bundle.descriptor.as_deref().ok_or_else(|| {
         ToolkitError::BadInput(
             "--from-import-json: envelope.bundle.descriptor is null; v0.27.0 \
@@ -913,22 +940,9 @@ fn run_from_import_json<W: Write, E: Write>(
     // derived from the typed `fingerprint`+`path`, so no `path_raw` normalization
     // is needed. FOLLOWUP `path-raw-bracketed-vs-bare-convention-unification`.)
 
-    // Derive network from envelope.
-    let network = cli_network_from_str(&envelope.bundle.network)?;
-
-    // cycle-5 S-NET (M13): the envelope's declared `bundle.network` string is
-    // trusted today (only the BIP-380 checksum is validated upstream). A
-    // mainnet-labeled envelope carrying testnet xpubs would be re-emitted with
-    // wrong version bytes by the downstream `apply_xpub_prefix`. Cross-check
-    // each decoded cosigner xpub's NetworkKind against the declared network and
-    // refuse fail-closed BEFORE any re-emit.
-    for slot in &resolved_slots {
-        crate::network::assert_network_agrees(
-            slot.xpub.network,
-            network.network_kind(),
-            "export: --from-import-json",
-        )?;
-    }
+    // The run network (the rule above has checked the envelope against it).
+    let network = args.network;
+    let _ = cli_network_from_str(&envelope.bundle.network)?;
 
     // Script-type from the parsed descriptor (canonical form sans checksum).
     // LENIENT, for the same reason as the two sites in `run`: this parse is

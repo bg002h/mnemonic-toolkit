@@ -129,12 +129,14 @@ impl WalletFormatEmitter for BsmsEmitter {
                     }
                     true
                 });
-                if let Some(decoded) = mismatch {
-                    crate::network::assert_network_agrees(
-                        decoded,
-                        inputs.network.network_kind(),
-                        "export: bsms first-address",
-                    )?;
+                // An internal invariant since the network rule (Spec A unit 1):
+                // every caller (export-wallet's arms, restore `--format`) runs
+                // the rule first, so a key of another class never reaches the
+                // mint from the CLI. Kept fail-closed, reachable by unit test.
+                if mismatch.is_some() {
+                    return Err(ToolkitError::BadInput(
+                        "internal: bsms export reached with a key of another network than the run; this is a bug".into(),
+                    ));
                 }
 
                 let line3 = path_restrictions_line(&parsed);
@@ -248,6 +250,44 @@ fn network_to_bitcoin(network: CliNetwork) -> bitcoin::Network {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The 4-line mint's network guard is an internal invariant since the
+    /// network rule (plan R1-M5): reached directly, it refuses with a bug line.
+    #[test]
+    fn bsms_4line_key_of_another_network_is_an_internal_error() {
+        use crate::wallet_export::{CheckedDescriptor, TimestampArg};
+        let desc = "wpkh([00000000/84h/1h/0h]tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M/0/*)#4cxmcfgh";
+        let parsed =
+            crate::parse_descriptor::parse_descriptor_lenient(desc.split('#').next().unwrap())
+                .expect("parses");
+        let canonical = parsed.to_string();
+        let inputs = EmitInputs {
+            canonical_descriptor: CheckedDescriptor::new(&canonical).unwrap(),
+            resolved_slots: &[],
+            template: None,
+            script_type: WalletScriptType::P2wpkh,
+            network: CliNetwork::Mainnet,
+            account: 0,
+            threshold: None,
+            threshold_user_supplied: false,
+            master_xpub_at_0: None,
+            wallet_name: "t",
+            wallet_name_is_non_default: false,
+            taproot_internal_key: None,
+            range: (0, 0),
+            timestamp: TimestampArg::Now,
+            bitcoin_core_version: 25,
+            bsms_form: BsmsForm::FourLine,
+            address_count: crate::wallet_export::DEFAULT_ADDRESS_COUNT,
+        };
+        match BsmsEmitter::emit(&inputs) {
+            Err(ToolkitError::BadInput(m)) => assert_eq!(
+                m,
+                "internal: bsms export reached with a key of another network than the run; this is a bug"
+            ),
+            other => panic!("expected the internal refusal, got {other:?}"),
+        }
+    }
 
     /// v0.28.0 P8A (plan-doc §S.8) — pin the two valid `script_type_short_name`
     /// returns. Discriminator strings appear verbatim in the v0.28.0
