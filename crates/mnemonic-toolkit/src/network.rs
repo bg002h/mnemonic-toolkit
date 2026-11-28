@@ -3,6 +3,10 @@
 //! Realizes SPEC §2.1.4 (4 networks + coin-type table) + §4.3 (network/
 //! xpub cross-check via Xpub::network field).
 
+/// The network rule lives in `network_rule` (Spec A unit 0 "pub in network.rs").
+#[allow(unused_imports)]
+pub use crate::network_rule as rule;
+
 use bitcoin::address::KnownHrp;
 use bitcoin::NetworkKind;
 use clap::ValueEnum;

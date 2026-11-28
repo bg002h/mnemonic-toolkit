@@ -162,6 +162,7 @@ mod cli_ms_shares_consume;
 mod cli_ms_shares_inconsistent;
 mod cli_multipath_duplicate_refusal;
 mod cli_network_fail_open;
+mod cli_network_rule_vectors;
 mod cli_non_canonical_descriptor;
 mod cli_nostr;
 mod cli_older_advisory;

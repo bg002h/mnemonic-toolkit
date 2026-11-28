@@ -6,7 +6,7 @@
 
 use crate::error::ToolkitError;
 use crate::{argv_guard, cmd, error, out_sink};
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::io::{self, Write};
 use std::process::ExitCode;
 
@@ -166,7 +166,13 @@ pub fn run() -> ExitCode {
         return ExitCode::from(argv_guard::EXIT_REFUSED);
     }
 
-    let cli = match Cli::try_parse() {
+    // `Cli::try_parse()`, split so the network rule learns whether `--network`
+    // was typed on the leaf subcommand (N2 `<run>`: "no --network given").
+    let parsed = Cli::command().try_get_matches().and_then(|mut m| {
+        crate::network_rule::set_network_given(network_typed(&m));
+        Cli::from_arg_matches_mut(&mut m).map_err(|e| e.format(&mut Cli::command()))
+    });
+    let cli = match parsed {
         Ok(c) => c,
         Err(e) => {
             // Override clap's default exit code 2 → 64 to keep format-violations distinct.
@@ -252,13 +258,27 @@ pub fn run() -> ExitCode {
 
     // The verb's own error line first (RepairShortCircuit prints nothing here), then the
     // write-error line from `finish_exit`.
+    let mut trailer: Vec<String> = Vec::new();
     let code = match result {
-        Ok(code) => code,
+        Ok(code) => {
+            // N12: TX-R, the last line of a test-network run that printed
+            // secret material made from a seed, after every advisory.
+            if let Some(line) = crate::network_rule::take_tx_r() {
+                trailer.push(line.text);
+            }
+            code
+        }
         // R2 I1: short-circuit fires a clean repair report on stderr inside
         // the helper; do NOT also emit the ToolkitError Display impl (which
         // would tack on "error: " noise). The exit code is carried in the
         // variant itself.
         Err(error::ToolkitError::RepairShortCircuit { exit_code }) => exit_code,
+        // The network rule: its lines print last on stderr (after
+        // `report_at_exit`), then the N10 machine line.
+        Err(error::ToolkitError::NetworkRule { lines }) => {
+            trailer = crate::network_rule::refusal_trailer(&lines);
+            crate::network_rule::EXIT_NETWORK_MISMATCH
+        }
         Err(e) => {
             // Emit error per SPEC §6.5 + §5.5.
             let _ = writeln!(io::stderr(), "{}", e);
@@ -267,7 +287,22 @@ pub fn run() -> ExitCode {
     };
     let _ = sink.flush();
     let exit4_is_result = matches!(cli.command, Command::Repair(_) | Command::Inspect(_));
-    finish_exit(&sink, code, exit4_is_result)
+    let exit = finish_exit(&sink, code, exit4_is_result);
+    for line in trailer {
+        let _ = writeln!(io::stderr(), "{line}");
+    }
+    exit
+}
+
+/// Whether `--network` was typed on the command line of the leaf subcommand
+/// (a clap default does not count).
+fn network_typed(m: &clap::ArgMatches) -> bool {
+    let mut m = m;
+    while let Some((_, sub)) = m.subcommand() {
+        m = sub;
+    }
+    m.ids().any(|id| id.as_str() == "network")
+        && m.value_source("network") == Some(clap::parser::ValueSource::CommandLine)
 }
 
 /// Map the exit code once (T6): a recorded stdout write error prints

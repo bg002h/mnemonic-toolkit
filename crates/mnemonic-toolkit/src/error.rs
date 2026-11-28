@@ -301,6 +301,12 @@ pub enum ToolkitError {
     },
     /// A nostr key (`npub`/`nsec` NIP-19 bech32 or 64-hex) failed to decode or
     /// validate (bad bech32/HRP/length, not-on-curve x-only, out-of-range scalar).
+    /// The network rule (SPEC_network_rule.md): a source of one network
+    /// contradicts the run's network or another source. Exit 8. `cli.rs`
+    /// prints the lines (and the N10 machine line) last on stderr.
+    NetworkRule {
+        lines: Vec<crate::network_rule::Line>,
+    },
     NostrKeyParse(String),
     /// v0.75.0 `mnemonic inspect <md1>` — the canonical
     /// `md_codec::descriptor_to_template` renderer (relocated into md-codec
@@ -685,6 +691,7 @@ impl ToolkitError {
             ToolkitError::MsCodec(e) => ms_codec_exit_code(e),
             ToolkitError::MultisigConfig { .. } => 1,
             ToolkitError::NetworkMismatch { .. } => 2,
+            ToolkitError::NetworkRule { .. } => crate::network_rule::EXIT_NETWORK_MISMATCH,
             ToolkitError::NostrKeyParse(_) => 1,
             ToolkitError::Render(_) => 2,
             ToolkitError::Repair(_) => 2,
@@ -757,6 +764,7 @@ impl ToolkitError {
             ToolkitError::MsCodec(_) => "MsCodec",
             ToolkitError::MultisigConfig { .. } => "MultisigConfig",
             ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
+            ToolkitError::NetworkRule { .. } => "NetworkRule",
             ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
             ToolkitError::Render(_) => "Render",
             ToolkitError::Repair(_) => "Repair",
@@ -951,6 +959,14 @@ impl ToolkitError {
                  {expected_network} was asserted (xpub version bytes distinguish \
                  mainnet vs testnet/signet/regtest only)"
             ),
+            ToolkitError::NetworkRule { lines } => {
+                let joined: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
+                let joined = joined.join("\n");
+                joined
+                    .strip_prefix("error: ")
+                    .map(str::to_owned)
+                    .unwrap_or(joined)
+            }
             ToolkitError::NostrKeyParse(msg) => format!("nostr: {msg}"),
             // `RenderError`'s Display already carries a structural-guard message
             // ("malformed descriptor tree: …"); surface it via the source.
@@ -1129,6 +1145,29 @@ pub type Result<T> = std::result::Result<T, ToolkitError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Spec A unit 0: the network-rule variant exits 8 (N9); the variants it
+    /// replaces keep their codes until their arm's unit.
+    #[test]
+    fn nr0_exit_code_8_is_network_mismatch() {
+        use crate::network_rule::{evaluate, CliNetwork, Input, RunNet, Thing, Verdict};
+        let Verdict::Refuse(lines) = evaluate(&Input::new(
+            RunNet::new(CliNetwork::Mainnet, false),
+            vec![crate::network_rule::Source::Wif {
+                class: crate::network_rule::Class::Test,
+                version: 239,
+            }],
+            Thing::Key,
+        )) else {
+            panic!("a test WIF on a mainnet run refuses");
+        };
+        let e = ToolkitError::NetworkRule { lines };
+        assert_eq!(e.exit_code(), 8);
+        assert_eq!(e.kind(), "NetworkRule");
+        assert!(e
+            .to_string()
+            .starts_with("error: network mismatch: the WIF key"));
+    }
 
     #[test]
     fn exit_code_table_per_variant() {
