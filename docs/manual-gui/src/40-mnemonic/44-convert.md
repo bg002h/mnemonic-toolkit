@@ -550,6 +550,33 @@ Boolean. Emit each `--to` output as a JSON envelope instead of
 plain stdout. The envelope shape is `{"node": "<name>", "value":
 "<...>"}` per output, joined as a JSON array when multiple
 `--to` rows are present.
+Under the CLI's `--phrase-out-dir` (below) the envelope's
+`schema_version` is `"2"` and the phrase entry is `{"node":
+"phrase", "path": "<file>", "already_saved": <bool>}` with no
+`value`; without it the envelope is unchanged (`"1"`).
+
+## Saving the words to a file (CLI) {#convert-cli-phrase-out-dir}
+
+The `mnemonic` CLI (toolkit, unreleased) adds two `convert` flags
+that the GUI form does not show yet; the form gains them with
+mnemonic-gui's schema-mirror update, and this chapter then gains
+their `--phrase-out-dir` and `--name-with-passphrase-fp` flag
+sections.
+
+- `--phrase-out-dir <DIR>` writes the `phrase` output to a new
+  owner-only (`0600`) file in an existing directory instead of
+  stdout, named `seed-<YYYY-MM-DD>-<fingerprint>[-<language>].txt`
+  (local date; the master fingerprint of the words with an empty
+  passphrase). The file holds the bare words and one newline, so
+  `bundle --slot @0.phrase=-` reads it back. It never replaces
+  anything: the same words already there print `already saved`;
+  anything else there is refused (exit 1). It needs `--to phrase`.
+- `--name-with-passphrase-fp` (only with `--phrase-out-dir` and a
+  non-empty `--passphrase`) adds the passphrase-applied fingerprint
+  to the name. It gives anyone holding the file an offline
+  passphrase checker.
+
+The full rules are in the user manual's `mnemonic convert` chapter.
 
 ## Worked example — phrase → ms1
 
