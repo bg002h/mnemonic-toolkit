@@ -1,6 +1,6 @@
 # PLAN: `export-wallet --format coldcard-edge` (taproot multisig for Coldcard Edge)
 
-Status: plan r2 (author Claude Opus 5.5, 2026-11-28). r1 folds R0
+Status: plan r2, GREEN at R2 (0C/0I; R2 Minors folded in §7) (author Claude Opus 5.5, 2026-11-28). r1 folds R0
 (`agent-reports/coldcard-edge-plan-R0.md`: 2C/8I/8M, every item); r2 folds R1
 (`agent-reports/coldcard-edge-plan-R1.md`: 0C/2I/9M, every item). Baseline:
 mnemonic-toolkit `origin/master` d72a18b1. Requested by Brian, 2026-11-28 (cards
@@ -229,3 +229,21 @@ wsh miniscript for Edge; multi-leaf trees; Edge-NUMS (H-xpub), `r=@`, `r=<hex>`
 internal keys (FOLLOWUP above); BSMS or BIP-388 output for Edge (already
 `--format bip388`); fixing I2-I4 for the other formats (FOLLOWUP above); restore
 support.
+
+## 7. R2 Minors (folded; binding on the build)
+
+- **M-1.** Check 3's "origin length == depth" is **toolkit policy** when the
+  origin has a fingerprint but no path (Edge skips it for blinded keys,
+  `desc_utils.py:312-317`); check 2 additionally requires a non-empty path.
+- **M-2.** Row `…_refuses_depth0_fingerprint_mismatch` uses `--descriptor` with
+  `[wrongfp]<depth-0 xpub>/<0;1>/*` and asserts the master-fingerprint wording.
+  The `child_number` clause applies only at depth ≥ 1.
+- **M-3.** Refusals name a key by its `[fp/path]` (unambiguous in check 4's
+  same-xpub case); on the template path the `@N` is added only where it is
+  derived positionally from the template construction.
+- **M-4.** §3.1's shape admission also runs inside the emitter, after the shared
+  gate (the 13-entry `FORMATS` test pins the order).
+- **Build gap.** `EmitInputs` cannot tell an explicit `--wallet-name` from a lifted
+  one (`wallet_name_is_non_default`, `cmd/export_wallet.rs:594,819`). Add a field
+  (e.g. `wallet_name_user_supplied`) set only from `args.wallet_name`; JSON keys
+  off it.
