@@ -228,8 +228,8 @@ mod language;
 pub mod network;
 #[cfg(not(fuzzing))]
 mod network;
-/// The network rule (SPEC_network_rule.md). `pub` so the vector-table test
-/// can run the helper (Spec A unit 0); re-exported from `network`.
+// The network rule (SPEC_network_rule.md). `pub` so the vector-table test
+// can run the helper (Spec A unit 0); re-exported from `network`.
 pub mod network_rule;
 mod nostr;
 mod out_sink;

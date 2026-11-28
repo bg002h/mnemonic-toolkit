@@ -5,7 +5,7 @@
 //! the refusal lines (exit 8) or the warnings of a run that goes on. The texts
 //! are SPEC §3's, verbatim, built in [`texts`]; the order, merging and drops
 //! are N8's. Every verb that reads a source builds an [`Input`] and calls
-//! [`enforce`] before its first stdout or file write.
+//! `enforce` before its first stdout or file write.
 //!
 //! The module is `pub` (unlike most of the crate) so that the integration test
 //! `tests/cli_network_rule_vectors.rs` can run the shared vector table through
@@ -189,7 +189,7 @@ fn exact_machine(n: CliNetwork) -> &'static str {
 
 /// An indexed name with a plural form: `key @0` / `keys @0 and @1`,
 /// `jade key @0` / `jade keys @0, @1 and @2`, `--cosigner @0's mk1 card` /
-/// `--cosigner @0's and @1's mk1 cards` (Spec A §3 "<who> by arm").
+/// `--cosigner @0's and @1's mk1 cards` (Spec A §3 "`<who>` by arm").
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Family {
     pub pre: String,
@@ -293,14 +293,14 @@ pub struct KeyCoin {
     pub coin: u32,
 }
 
-/// How "<who>'s path <path>" renders for a coin.
+/// How "`<who>'s path <path>`" renders for a coin.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PathWho {
-    /// The origin of the key that carries the coin: "<key who>'s path <path>".
+    /// The origin of the key that carries the coin: "`<key who>'s path <path>`".
     OwnKey,
-    /// Another name (an md1 slot): "key @0's path <path>".
+    /// Another name (an md1 slot): "`key @0's path <path>`".
     Named(Who),
-    /// A path flag: "the path <path> given with --path".
+    /// A path flag: "`the path <path> given with --path`".
     Flag(String),
 }
 
@@ -844,8 +844,8 @@ pub mod texts {
         )
     }
 
-    /// TX-S key form. `path_phrase` is "<who>'s path <path> is a <pclass> path"
-    /// (or its plural); `key_phrase` "<who> is a <kclass> key" (or plural).
+    /// TX-S key form. `path_phrase` is "`<who>'s path <path> is a <pclass> path`"
+    /// (or its plural); `key_phrase` "`<who> is a <kclass> key`" (or plural).
     #[allow(clippy::too_many_arguments)]
     pub fn s_key(
         path_phrase: &str,
@@ -948,7 +948,7 @@ fn pfx_join(keys: &[&KeySource]) -> String {
     seen.join(", ")
 }
 
-/// "<who>'s path <path>" for one coin, or its plural; returns (phrase prefix
+/// "`<who>'s path <path>`" for one coin, or its plural; returns (phrase prefix
 /// for the text, machine `a.what`), the text ending before " is a"/" are".
 fn path_whats(entries: &[&SoftEntry]) -> (String, String) {
     let who_of = |e: &SoftEntry| -> Option<Who> {
