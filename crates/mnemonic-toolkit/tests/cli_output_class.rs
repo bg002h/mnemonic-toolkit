@@ -302,7 +302,8 @@ fn bundle_descriptor_emits_watch_only() {
         .args([
             "bundle",
             "--descriptor",
-            "wpkh([704c7836/84h/0h/0h]tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*)",
+            // Spec B unit 8a: a tpub at a coin-0 origin is TX-S; coin 1h here.
+            "wpkh([704c7836/84h/1h/0h]tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*)",
             "--network",
             "testnet",
             "--no-engraving-card",

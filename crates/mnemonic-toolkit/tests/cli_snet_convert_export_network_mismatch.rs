@@ -9,7 +9,8 @@
 //!   `bundle.network` is trusted but cross-checked against the decoded xpubs.
 //!
 //! Each: a RED test (exit 2 + "network mismatch" message) + a consistent
-//! positive control (exit 0).
+//! positive control (exit 0). Spec B unit 8a moves M14 and L11 to the
+//! network rule (exit 8, TX-H1 / TX-H5).
 
 use assert_cmd::Command;
 use std::path::PathBuf;
@@ -33,18 +34,18 @@ fn fixture(name: &str) -> PathBuf {
     PathBuf::from("tests/fixtures/wallet_import").join(name)
 }
 
-fn assert_mismatch(out: &std::process::Output, who: &str) {
+/// The network rule (Spec B unit 8a): exit 8, stdout empty, the last stderr
+/// line exactly `want`.
+#[track_caller]
+fn assert_rule(out: &std::process::Output, who: &str, want: &str) {
+    let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(
         out.status.code(),
-        Some(2),
-        "{who}: must exit 2; stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
+        Some(8),
+        "{who}: must exit 8; stderr: {stderr}"
     );
-    assert!(
-        String::from_utf8_lossy(&out.stderr).contains("network mismatch"),
-        "{who}: expected NetworkMismatch; stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.stdout.is_empty(), "{who}: stdout must be empty");
+    assert_eq!(stderr.lines().last(), Some(want), "{who}");
 }
 
 // ── M14: convert --xpub-prefix ───────────────────────────────────────────────
@@ -65,7 +66,11 @@ fn m14_tpub_reemit_into_mainnet_prefix_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "M14 convert --xpub-prefix");
+    assert_rule(
+        &out,
+        "M14 convert --xpub-prefix",
+        "error: network mismatch: --from xpub is a test-network key (tpub), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet.",
+    );
 }
 
 #[test]
@@ -104,7 +109,17 @@ fn l11_testnet_wif_to_xpub_mainnet_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "L11 convert wif→xpub");
+    assert_rule(
+        &out,
+        "L11 convert wif→xpub",
+        "error: network mismatch: the WIF key is a test-network key (version byte 239), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet.",
+    );
+    // The rule refuses before the wif→xpub sentinel advisory.
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains("depth-0 sentinel"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]

@@ -128,6 +128,8 @@ fn input_normalizer_testnet_vpub_to_xpub_normalizes_to_tpub() {
             &format!("xpub={TREZOR_12_BIP84_TESTNET_VPUB}"),
             "--to",
             "xpub",
+            "--network",
+            "testnet",
         ])
         .assert()
         .success();
@@ -146,6 +148,8 @@ fn input_normalizer_testnet_upub_to_xpub_normalizes_to_tpub() {
             &format!("xpub={TREZOR_12_BIP84_TESTNET_UPUB}"),
             "--to",
             "xpub",
+            "--network",
+            "testnet",
         ])
         .assert()
         .success();

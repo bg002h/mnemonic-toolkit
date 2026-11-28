@@ -13,6 +13,10 @@ use assert_cmd::Command;
 
 const MASTER_XPRV: &str =
     "xprv9s21ZrQH143K2LBWUUQRFXhucrQqBpKdRRxNVq2zBqsx8HVqFk2uYo8kmbaLLHRdqtQpUm98uKfu3vca1LqdGhUtyoFnCNkfmXRyPXLjbKb";
+/// MASTER_XPRV with test-network version bytes: the network rule refuses a
+/// main key on a test run (Spec B R8a.18), so the testnet legs use this.
+const MASTER_TPRV: &str =
+    "tprv8ZgxMBicQKsPd9R393FvRBKtvyq3RLMdkysVNFTSfpNRutEvF7Nf4YWCgmjzLeoxDKwbUrku4gFhWnAK8ZBa5kkVWSU5rjUigdBPqEuq5Ah";
 
 /// SPEC §6 cell 1 — BIP-85 BIP-39 12-English-word reference vector.
 /// Path m/83696968'/39'/0'/12'/0' → "girl mad pet galaxy egg matter matrix prison refuse sense ordinary nose".
@@ -618,7 +622,7 @@ fn hd_seed_wif_testnet_prefix() {
         .args([
             "derive-child",
             "--from",
-            &format!("xprv={MASTER_XPRV}"),
+            &format!("xprv={MASTER_TPRV}"),
             "--application",
             "hd-seed",
             "--length",
@@ -646,7 +650,7 @@ fn xprv_child_testnet_prefix() {
         .args([
             "derive-child",
             "--from",
-            &format!("xprv={MASTER_XPRV}"),
+            &format!("xprv={MASTER_TPRV}"),
             "--application",
             "xprv",
             "--length",

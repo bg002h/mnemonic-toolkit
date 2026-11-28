@@ -244,6 +244,9 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
             crate::passphrase_input::stdin_spelling(args.passphrase_stdin),
         ),
     ])?;
+    // The network rule (Spec B R8a.7): the target against the run, before
+    // any search.
+    super::target_xpub_network_check(&args.target_xpub, args.network, stderr)?;
     // 1) Resolve seed (mutex + parse + ms1 auto-fire attempt). Cycle F: a
     //    touched ms1 correction no longer short-circuits here — it falls
     //    through to the original decode error, with a stderr advisory.

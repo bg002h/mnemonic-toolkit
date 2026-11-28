@@ -75,6 +75,11 @@ pub struct DescriptorIntake {
     /// envelope extension.
     #[allow(dead_code)]
     pub defaulted_indices: Vec<u8>,
+    /// The network-rule sources of the descriptor as given (Spec B R8a.20):
+    /// each extended key `key @i` with its origin coin; an md1 slot's origin
+    /// coin as a coin with no key (md1 keys carry no version). Default paths
+    /// the intake fills in are no source (B1).
+    pub rule_sources: Vec<crate::network_rule::Source>,
 }
 
 /// NUMS H-point x-only key (mirrors `parse_descriptor::NUMS_H_POINT_X_ONLY_HEX`).
@@ -135,11 +140,26 @@ fn intake_from_shape(
     account: u32,
     stderr: &mut impl std::io::Write,
 ) -> Result<DescriptorIntake, ToolkitError> {
-    match shape {
+    let mut intake = match shape {
         DescriptorShape::Bip388Json => parse_bip388_json(payload, network, account, stderr),
         DescriptorShape::Md1 => parse_md1(payload, stderr),
         DescriptorShape::LiteralXpub => parse_literal_xpub(payload, network, account, stderr),
+    }?;
+    let concrete = match shape {
+        DescriptorShape::Bip388Json => {
+            crate::wallet_import::pipeline::expand_bip388_policy(payload).ok()
+        }
+        DescriptorShape::LiteralXpub => Some(payload.trim().to_string()),
+        DescriptorShape::Md1 => None,
+    };
+    if let Some(c) = concrete {
+        let bare = c.split('#').next().unwrap_or(&c);
+        let expanded = crate::parse_descriptor::expand_literal_double_star(bare);
+        if let Ok(d) = crate::parse_descriptor::parse_descriptor_lenient(expanded.as_ref()) {
+            intake.rule_sources = crate::network_rule::descriptor_sources(expanded.as_ref(), &d);
+        }
     }
+    Ok(intake)
 }
 
 /// Auto-detect descriptor shape per plan §4.2 tie-break order.
@@ -279,10 +299,23 @@ fn parse_md1(
             is_nums: false,
         });
     }
+    let rule_sources = cosigners
+        .iter()
+        .filter_map(|c| {
+            c.derivation_path_anno.as_ref().and_then(|p| {
+                crate::network_rule::key_coin(
+                    crate::network_rule::PathWho::Named(crate::network_rule::Who::key(c.idx)),
+                    p,
+                )
+            })
+        })
+        .map(crate::network_rule::Source::Coin)
+        .collect();
     Ok(DescriptorIntake {
         cosigners,
         shape: DescriptorShape::Md1,
         defaulted_indices: Vec::new(),
+        rule_sources,
     })
 }
 
@@ -419,6 +452,7 @@ fn parse_literal_xpub(
         cosigners,
         shape: DescriptorShape::LiteralXpub,
         defaulted_indices,
+        rule_sources: Vec::new(),
     })
 }
 

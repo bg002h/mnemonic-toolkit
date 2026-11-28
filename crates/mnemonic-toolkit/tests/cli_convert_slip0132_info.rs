@@ -232,6 +232,8 @@ fn convert_variant_coverage_upub_testnet() {
             &format!("xpub={TREZOR_12_BIP84_TESTNET_UPUB}"),
             "--to",
             "xpub",
+            "--network",
+            "testnet",
         ])
         .assert()
         .success();
@@ -250,6 +252,8 @@ fn convert_variant_coverage_big_u_testnet() {
             &format!("xpub={TREZOR_12_BIP84_TESTNET_BIG_U}"),
             "--to",
             "xpub",
+            "--network",
+            "testnet",
         ])
         .assert()
         .success();
@@ -268,6 +272,8 @@ fn convert_variant_coverage_vpub_testnet() {
             &format!("xpub={TREZOR_12_BIP84_TESTNET_VPUB}"),
             "--to",
             "xpub",
+            "--network",
+            "testnet",
         ])
         .assert()
         .success();
@@ -286,6 +292,8 @@ fn convert_variant_coverage_big_v_testnet() {
             &format!("xpub={TREZOR_12_BIP84_TESTNET_BIG_V}"),
             "--to",
             "xpub",
+            "--network",
+            "testnet",
         ])
         .assert()
         .success();

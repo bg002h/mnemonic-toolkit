@@ -24,6 +24,7 @@ const X: &str = "tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XV
 /// Signet `m/44'/1'/0'` tpub of PHRASE.
 const X44: &str = "tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba";
 
+const TX_R: &str = "warning: This rehearsal used your real seeds. Everything it engraved or printed from them is as secret as your real kit: destroy it, do not discard it.";
 const ADVISORY: &str = "warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')\n";
 const W1: &str = "error: --min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits\n";
 const DEADLINE: Duration = Duration::from_secs(60);
@@ -118,6 +119,9 @@ fn dice_args(length: &str) -> Vec<&str> {
         length,
         "--index",
         "0",
+        // T is a tprv: the network rule refuses it on mainnet.
+        "--network",
+        "testnet",
     ]
 }
 
@@ -137,7 +141,9 @@ fn bh_tk_mn7_dice_long_child_streams_byte_identical() {
         hex::encode(Sha256::digest(&r.stdout)),
         "2d14b9d9f52ab6379a461cd7d41c6bc01a36d69c4aa1c8727d1b9d39d3a62c59"
     );
-    assert_eq!(r.err(), ADVISORY);
+    // Spec B unit 8a (N12): a test run whose stdout is private key material
+    // made from a tprv ends with TX-R.
+    assert_eq!(r.err(), format!("{ADVISORY}{TX_R}\n"));
 }
 
 #[test]

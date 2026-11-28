@@ -120,6 +120,10 @@ pub struct AccountOfDescriptorArgs {
     #[arg(long)]
     pub json: bool,
 
+    /// Go on when an origin path's coin type (0h or 1h) disagrees with its key or the network; the output is for the run's network, every path is kept as written, and a warning is printed each time.
+    #[arg(long = "accept-coin-type-mismatch")]
+    pub accept_coin_type_mismatch: bool,
+
     /// Positional ms1 card (HRP-autodetect). BIP-39 phrase text is NOT
     /// accepted positionally (no HRP for autodetect) — use --phrase /
     /// --phrase-stdin.
@@ -296,6 +300,19 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
         let value = args.descriptor.as_deref().expect("checked above");
         intake_from_descriptor_value(value, args.network, args.min_account, stderr)?
     };
+
+    // The network rule (Spec B R8a.20): the descriptor's keys and origin
+    // coin types against the run (`--network`, default mainnet), before any
+    // search; `--descriptor-from` too.
+    {
+        let mut input = crate::network_rule::Input::new(
+            crate::network_rule::RunNet::from_defaulted(args.network),
+            descriptor_intake.rule_sources.clone(),
+            crate::network_rule::Thing::Descriptor,
+        );
+        input.accept_coin_type = args.accept_coin_type_mismatch;
+        crate::network_rule::enforce(&input, stderr)?;
+    }
 
     // 2) Resolve seed intake.
     let mnemonic = resolve_seed(args, stdin, stdout, stderr, no_auto_repair)?;

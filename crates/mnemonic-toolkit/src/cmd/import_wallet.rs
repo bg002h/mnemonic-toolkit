@@ -1488,6 +1488,8 @@ electrum|jade|sparrow|specter>"
         .flat_map(|p| &p.cosigners)
         .any(|c| c.entropy.is_some())
     {
+        // N12: entropy on stdout comes from the seed overlay this run read.
+        crate::network_rule::record_secret_run(run_net, true, true);
         crate::secret_advisory::OutputClass::PrivateKeyMaterial
     } else {
         crate::secret_advisory::OutputClass::WatchOnly

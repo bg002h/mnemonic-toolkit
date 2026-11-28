@@ -166,3 +166,23 @@ plan §3 unit 3 table):
 - cli_import_wallet_bsms.rs::bsms_mixed_coin_types_rejected: exit 2 -> 8, TX-H2 + TX-H1 (short) literals
 - bughunt_s3.rs::bughunt_tk_19b_coldcard_multisig_bip45_mixed_paths_refused and s2_red.rs::s2_red_19c_single_component_non_45_path_refused: the path-length refusal is gone (exit 2 -> 0, imported, no network line)
 - src unit tests: bsms `parse_4line_first_address_mismatch_emits_warning` (calls `first_address_audit`), coldcard_multisig `parse_heterogeneous_coin_type_rejected` -> `_parses`, `parse_testnet_path_sets_network_testnet` -> `parse_testnet_path_keeps_path_network_placeholder`, sparrow/specter `parse_testnet_network_inferred_from_coin_type_one` -> `parse_testnet_coin_type_one_no_network_inferred`
+
+## Changed at unit 8a (run; each explained by a spec row)
+
+- On the list above, changed to the spec's exit and text: cli_network_fail_open.rs
+  e1a, e2a, e2_minor (exit 2 -> 8, TX-H1 / TX-H3 literals); e1c renamed
+  `e1c_testnet_tpub_to_address_no_network_refused` (exit 0 -> 8, TX-H1, D1);
+  cli_snet_convert_export_network_mismatch.rs m14 and l11 (exit 2 -> 8, TX-H1 /
+  TX-H5 literal); cli_xpub_search_address_of_xpub.rs::network_inference_from_tpub_prefix
+  (passes `--network testnet`, and pins the no-flag refusal); cli_convert_convergence.rs
+  c4 and the cli_convert_slip0132*.rs NOFLAG tests (pass `--network testnet`);
+  cli_output_class.rs::bundle_descriptor_emits_watch_only (origin coin 1h: a tpub at
+  coin 0h is TX-S); cli_bundle_h7_prefix_origin.rs (run on mainnet: its descriptor's
+  origin is coin 0h); bughunt_s2.rs tk_45 (bundle --import-json, exit 1 -> 8, TX-H4
+  literals).
+- Not on the list, explained by R8a.18/R8a.19 (a main xprv on a test run, a tprv with
+  no flag): cli_derive_child.rs::hd_seed_wif_testnet_prefix and xprv_child_testnet_prefix
+  (input is now the tprv of the same master), bughunt_1119_unbounded_args.rs bh_tk_mn7_*
+  (pass `--network testnet`; the long-child leg ends with TX-R, N12).
+- Not on the list, explained by N12/T6: stdout_write_errors.rs::r4_bundle_dev_full_exits_1
+  (TX-R moved before the write-error line; the test is unchanged).

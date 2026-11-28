@@ -488,14 +488,16 @@ fn bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet() {
         ])
     };
 
-    // mainnet against a testnet envelope: refused.
+    // mainnet against a testnet envelope: refused (Spec B unit 8a: TX-H4,
+    // exit 8).
+    let f = env_path.display();
     let o = bundle("mainnet", &env_path);
-    assert_eq!(o.status.code(), Some(1), "stdout:\n{}", out_s(&o));
+    assert_eq!(o.status.code(), Some(8), "stdout:\n{}", out_s(&o));
     assert!(out_s(&o).is_empty(), "stdout:\n{}", out_s(&o));
     assert!(
-        err_s(&o).contains(
-            "error: --network mainnet disagrees with the --import-json envelope's bundle.network (testnet); re-run with --network testnet"
-        ),
+        err_s(&o).lines().any(|l| l == format!(
+            "error: network mismatch: {f} says network testnet, but --network is mainnet. Nothing was written. Rerun with --network testnet, or use the file made for mainnet."
+        )),
         "stderr:\n{}",
         err_s(&o)
     );
@@ -505,14 +507,14 @@ fn bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet() {
     assert_eq!(o.status.code(), Some(0), "stderr:\n{}", err_s(&o));
     assert_eq!(json(&o)["network"], "testnet");
 
-    // signet against a default (testnet) envelope: the longer text.
+    // signet against a testnet envelope: TX-H4 too.
     let o = bundle("signet", &env_path);
-    assert_eq!(o.status.code(), Some(1), "stdout:\n{}", out_s(&o));
+    assert_eq!(o.status.code(), Some(8), "stdout:\n{}", out_s(&o));
     assert!(out_s(&o).is_empty(), "stdout:\n{}", out_s(&o));
     assert!(
-        err_s(&o).contains(
-            "error: --network signet disagrees with the --import-json envelope's bundle.network (testnet); if the wallet is on signet, re-create the envelope with import-wallet --network signet from the same blob, otherwise re-run with --network testnet"
-        ),
+        err_s(&o).lines().any(|l| l == format!(
+            "error: network mismatch: {f} says network testnet, but --network is signet. Nothing was written. Rerun with --network testnet, or use the file made for signet."
+        )),
         "stderr:\n{}",
         err_s(&o)
     );

@@ -1023,11 +1023,17 @@ impl SoftGroup<'_> {
         let ok = texts::s_ok(&path_phrase, run);
         let a = end(a_what, pclass.machine());
         if self.is_key_form() {
-            let keys: Vec<&KeySource> = self.entries.iter().filter_map(|e| e.key).collect();
+            // One key with several coins is named once.
+            let mut keys: Vec<&KeySource> = Vec::new();
+            for k in self.entries.iter().filter_map(|e| e.key) {
+                if !keys.iter().any(|seen| seen.who == k.who) {
+                    keys.push(k);
+                }
+            }
             let kclass = keys[0].class;
             let whos: Vec<&Who> = keys.iter().map(|k| &k.who).collect();
             let kw = plural(&whos);
-            let key_phrase = if plural_n {
+            let key_phrase = if keys.len() > 1 {
                 format!("{kw} are {} keys", kclass.adj())
             } else {
                 format!("{kw} is a {} key", kclass.adj())

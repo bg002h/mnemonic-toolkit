@@ -248,6 +248,119 @@ pub struct VerifyBundleArgs {
         conflicts_with = "bundle_json",
     )]
     pub extra_strings: Vec<String>,
+
+    /// Go on when an origin path's coin type (0h or 1h) disagrees with its key or the network; the output is for the run's network, every path is kept as written, and a warning is printed each time.
+    #[arg(long = "accept-coin-type-mismatch")]
+    pub accept_coin_type_mismatch: bool,
+}
+
+/// The network-rule sources of a verify-bundle run (Spec B unit 8a): each
+/// `--mk1` card (`the mk1 card`, or `mk1 card @N` when several; N is the
+/// card's position among the cards, first seen first) with its own origin
+/// coin; each slot origin coin of a keyed md1 bound to the card of that slot
+/// (`key @N`), else a coin with no key; the `--slot` keys. Decoding is best
+/// effort (R1-M1): a card that does not decode is no source, and the mode
+/// decodes, repairs and reports it as today.
+fn verify_bundle_network_sources(args: &VerifyBundleArgs) -> Vec<crate::network_rule::Source> {
+    use crate::network_rule::{key_coin, mk1_key_source, PathWho, Source, Who};
+    let mut groups: Vec<Vec<&str>> = Vec::new();
+    let mut index_of: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+    for s in &args.mk1 {
+        match chunk_set_id_extract(s) {
+            Some(csi) => {
+                let gi = *index_of.entry(csi).or_insert_with(|| {
+                    groups.push(Vec::new());
+                    groups.len() - 1
+                });
+                groups[gi].push(s.as_str());
+            }
+            None => groups.push(vec![s.as_str()]),
+        }
+    }
+    let several = groups.len() > 1;
+    let mut cards: Vec<Option<crate::network_rule::KeySource>> = groups
+        .iter()
+        .enumerate()
+        .map(|(i, g)| {
+            mk_codec::decode(g).ok().map(|card| {
+                let who = if several {
+                    Who::stem("mk1 card", i)
+                } else {
+                    Who::plain("the mk1 card")
+                };
+                mk1_key_source(who, &card)
+            })
+        })
+        .collect();
+    let mut loose: Vec<Source> = Vec::new();
+    if !args.md1.is_empty() {
+        let refs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
+        let decoded = match refs.as_slice() {
+            [single] => md_codec::decode_md1_string(single),
+            _ => md_codec::chunk::reassemble(&refs),
+        };
+        // Only a keyed wallet-policy md1 carries its origins; a keyless
+        // template's origin comes from the network (B1).
+        if let Some(d) = decoded.ok().filter(|d| d.is_wallet_policy()) {
+            for idx in 0..d.n as usize {
+                let op = d
+                    .tlv
+                    .origin_path_overrides
+                    .as_ref()
+                    .and_then(|o| o.iter().find(|(i, _)| *i as usize == idx))
+                    .map(|(_, op)| op.clone())
+                    .or_else(|| match &d.path_decl.paths {
+                        md_codec::origin_path::PathDeclPaths::Shared(op) => Some(op.clone()),
+                        md_codec::origin_path::PathDeclPaths::Divergent(v) => v.get(idx).cloned(),
+                    });
+                let Some(path) =
+                    op.and_then(|op| crate::cmd::bundle::origin_to_derivation_path(&op).ok())
+                else {
+                    continue;
+                };
+                let Some(coin) = key_coin(PathWho::Named(Who::key(idx)), &path) else {
+                    continue;
+                };
+                match cards.get_mut(idx).and_then(|c| c.as_mut()) {
+                    Some(card) => card.coins.insert(0, coin),
+                    None => loose.push(Source::Coin(coin)),
+                }
+            }
+        }
+    }
+    let mut out: Vec<Source> = cards.into_iter().flatten().map(Source::Key).collect();
+    out.extend(crate::network_rule::slot_sources(&args.slot));
+    out.extend(loose);
+    out
+}
+
+/// TX-V (Spec A §3, Spec B unit 8a; plan R1-I2, R2-M1): printed after the
+/// rows when at least one row failed and every failed row is one of the four
+/// network-sensitive rows (an indexed multisig name `mk1_xpub_match[1]`
+/// counts as its base name). The run reaching the rows was not refused.
+fn tx_v_applies(checks: &[VerifyCheck]) -> bool {
+    const NETWORK_ROWS: [&str; 4] = [
+        "mk1_xpub_match",
+        "mk1_path_match",
+        "md1_xpub_match",
+        "md1_origin_match",
+    ];
+    let mut failed = checks.iter().filter(|c| !c.passed).peekable();
+    failed.peek().is_some()
+        && failed.all(|c| {
+            let base = c.name.split('[').next().unwrap_or(&c.name);
+            NETWORK_ROWS.contains(&base)
+        })
+}
+
+fn emit_tx_v<E: Write>(applies: bool, network: CliNetwork, stderr: &mut E) {
+    if applies {
+        let _ = writeln!(
+            stderr,
+            "{}",
+            crate::network_rule::texts::v(crate::network_rule::RunNet::new(network, true))
+        );
+    }
 }
 
 impl VerifyBundleArgs {
@@ -486,6 +599,20 @@ pub fn run<W: Write, E: Write>(
         .map(|s| pin_pages_for(s.value.as_bytes()))
         .collect();
 
+    // The network rule (Spec B unit 8a): the mk1 cards' versions and every
+    // origin coin type against the run, before any mode (and so before any
+    // row); `--network` is required, so the run is always given.
+    {
+        let mut input = crate::network_rule::Input::new(
+            crate::network_rule::RunNet::new(args.network, true),
+            verify_bundle_network_sources(args),
+            crate::network_rule::Thing::Card,
+        );
+        input.seed_only = true;
+        input.accept_coin_type = args.accept_coin_type_mismatch;
+        crate::network_rule::enforce(&input, stderr)?;
+    }
+
     // #28 phase 1 — keyless SINGLE-SIG TEMPLATE bundle short-circuit. A
     // template-form md1 (`bundle --md1-form=template`) is keyless + single-sig +
     // canonical-origin-elided; the policy-form expected-bundle reconstruction
@@ -653,6 +780,7 @@ pub fn run<W: Write, E: Write>(
     }
 
     let any_fail = checks.iter().any(|c| !c.passed);
+    let tx_v = tx_v_applies(&checks);
     // P2.2 (pathless partial-decode) — funds-critical verdict gate. Precedence:
     // mismatch > partial > ok (M-1). A FAILED structural check ⇒ `mismatch`
     // WINS (a structurally-wrong dead card must never read as merely partial).
@@ -699,6 +827,7 @@ pub fn run<W: Write, E: Write>(
         }
         writeln!(stdout, "result: {}", result).map_err(ToolkitError::Io)?;
     }
+    emit_tx_v(tx_v, args.network, stderr);
     if partial {
         crate::cmd::md1_partial::emit_partial_stderr_note(&partial_indices, stderr);
     }
@@ -951,6 +1080,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
 
     // ---- Emit verdict -------------------------------------------------------
     let any_fail = checks.iter().any(|c| !c.passed);
+    let tx_v = tx_v_applies(&checks);
     if json_context {
         let result = if any_fail { "mismatch" } else { "ok" };
         let json = serde_json::json!({
@@ -985,6 +1115,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
         }
     }
 
+    emit_tx_v(tx_v, args.network, stderr);
     Ok(if any_fail { 4 } else { 0 })
 }
 
@@ -1189,6 +1320,7 @@ fn verify_multisig_template<W: Write, E: Write>(
 
     // ---- Emit verdict (mirror verify_singlesig_template's envelope) ---------
     let any_fail = checks.iter().any(|c| !c.passed);
+    let tx_v = tx_v_applies(&checks);
     if json_context {
         let result = if any_fail { "mismatch" } else { "ok" };
         let json = serde_json::json!({
@@ -1228,6 +1360,7 @@ fn verify_multisig_template<W: Write, E: Write>(
         }
     }
 
+    emit_tx_v(tx_v, args.network, stderr);
     Ok(if any_fail { 4 } else { 0 })
 }
 
@@ -2038,6 +2171,7 @@ fn verify_emit_from_expected<W: Write, E: Write>(
     )?;
 
     let any_fail = checks.iter().any(|c| !c.passed);
+    let tx_v = tx_v_applies(&checks);
     // P2.2 (pathless partial-decode) — the descriptor-mode verdict gate; SAME
     // funds-critical precedence as the template-mode `run` site: mismatch >
     // partial > ok. (Both descriptor forks — @N and bare-concrete — funnel here.)
@@ -2078,6 +2212,7 @@ fn verify_emit_from_expected<W: Write, E: Write>(
         }
         writeln!(stdout, "result: {}", result_str).map_err(ToolkitError::Io)?;
     }
+    emit_tx_v(tx_v, args.network, stderr);
     if partial {
         crate::cmd::md1_partial::emit_partial_stderr_note(&partial_indices, stderr);
     }
@@ -5134,5 +5269,30 @@ mod helper_tests {
         );
         assert!(!ms1_decode.detail.contains("recovered"), "{ms1_decode:?}");
         assert!(ms1_match.passed, "skipped-vacuously: {ms1_match:?}");
+    }
+
+    fn check(name: &str, passed: bool) -> VerifyCheck {
+        VerifyCheck {
+            name: name.to_string(),
+            passed,
+            ..VerifyCheck::default()
+        }
+    }
+
+    #[test]
+    fn nr8a_tx_v_applies_strips_index() {
+        // R2-M1: multisig rows carry `[i]`; only the four network rows count.
+        assert!(tx_v_applies(&[
+            check("mk1_xpub_match[0]", false),
+            check("mk1_path_match[1]", false),
+            check("md1_xpub_match[1]", false),
+            check("ms1_decode", true),
+        ]));
+        assert!(!tx_v_applies(&[
+            check("mk1_xpub_match[0]", false),
+            check("ms1_decode[1]", false),
+        ]));
+        assert!(!tx_v_applies(&[check("mk1_xpub_match[0]", true)]));
+        assert!(!tx_v_applies(&[]));
     }
 }

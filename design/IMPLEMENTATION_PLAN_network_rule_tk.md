@@ -824,3 +824,45 @@ deviations from the plan's text. Each is listed for the whole-diff review.
   the test: `build_bsms_6line` writes a checksummed descriptor line.
 - **Unit 3: the 8a import-wallet flag leg** (`nr8a_import_wallet_coin_type_flag`)
   is written and committed with unit 3, since it exercises unit 3's check.
+- **Unit 8a: convert reads no kept artifact.** `reads_kept = false` at the
+  convert site: a non-seed, non-key input (an address, a fingerprint, a
+  path) prints no TX-N. A WIF is a source for every `--to` (version byte,
+  TX-H5).
+- **Unit 8a: convert check moves before the wif→xpub advisory.** The check
+  sits before step 7's "depth-0 sentinel" warning, so a refused WIF prints
+  only the rule's line (L11 pins it).
+- **Unit 8a: verify-bundle sources.** mk1 card N is the card's first-seen
+  position (cards grouped by chunk-set id); md1 coins come only from a keyed
+  wallet-policy md1 (a keyless template's origin is derived, B1); its
+  `--descriptor` keys are not sources there. TX-S key form names one key
+  once when it carries several coins (the card's own coin and the md1 slot
+  coin bound to it), so the line says "the mk1 card is a test-network key",
+  not "the mk1 card and the mk1 card are".
+- **Unit 8a: R2-M1.** `tx_v_applies` strips `[i]` before matching the four
+  network rows; unit test `nr8a_tx_v_applies_strips_index` (src) holds the
+  multisig cases.
+- **Unit 8a: bundle `--descriptor` placeholder origins.** Spec A's row
+  "bundle `--descriptor` ... as export-wallet `--descriptor`" is read to cover
+  the `@N` form: each placeholder's typed origin (`@N[fp/path]` or
+  `[fp/path]@N`) is a coin source named `key @N` (run form). Without it a
+  regtest bundle at a coin-0 origin passes and its own verify-bundle then
+  refuses it (`cli_bundle_h7_prefix_origin` moved to mainnet; the leg is in
+  `nr8a_bundle_descriptor_refused`).
+- **Unit 8a: R8a.6 check lands in 8a.** restore's `--origin` coin and
+  `--expect-xpub` key are checked in 8a for every restore mode; step 8a-0
+  only changes what single-sig restore derives.
+- **Unit 8a: `bundle --import-json`.** The FIX #45 BadInput block is replaced
+  by the envelope check (TX-H4/TX-H4C) in 8a (the plan put its TX-H4 leg in
+  8b, which keeps the TRACE leg).
+- **Unit 8a: nostr TX-N** prints after the output-class advisory.
+- **Unit 8a: xpub-search target** is resolved best effort for the check: a
+  target that does not parse is left to the verb's own error.
+- **Unit 8a: TX-R and a stdout write error.** TX-R prints before
+  `finish_exit`, so a stdout write error (T6) stays the last stderr line
+  (`stdout_write_errors::r4_bundle_dev_full_exits_1`); with no write error
+  TX-R is the last line except for the mlock summary, which is printed only
+  when a page-pin failed.
+- **Unit 8a: derive-child dice** output is PrivateKeyMaterial, so a tprv
+  input on a test run ends with TX-R (`bh_tk_mn7_dice_long_child_streams_byte_identical`).
+- **Unit 8a: RED check.** With src stashed, the 17 `nr8a_*` tests of
+  `cli_network_rule_rest.rs` fail.

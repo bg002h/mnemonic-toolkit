@@ -363,6 +363,12 @@ pub fn run<R: Read, W: Write, E: Write>(
         )
         .map_err(ToolkitError::Io)?;
     }
+    // N12: the scan/spend keys come from the seed or xprv this run read.
+    crate::network_rule::record_secret_run(
+        crate::network_rule::RunNet::from_defaulted(args.network),
+        true,
+        true,
+    );
     crate::secret_advisory::emit_output_class_advisory(
         crate::secret_advisory::OutputClass::PrivateKeyMaterial,
         stderr,

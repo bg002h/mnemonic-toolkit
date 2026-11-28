@@ -140,6 +140,18 @@ struct NostrJson {
 
 // Signature MUST match the sibling pattern (by-ref args, Result<u8>); the
 // dispatch is `match &cli.command`. Verify against cmd/electrum_decrypt.rs.
+/// The network rule for nostr (Spec B R8a.9, `nr8a_nostr_secret_prints_tx_n`):
+/// a nostr key names no network (D5), so a run prints TX-N (no `--network`)
+/// or TX-T (a test `--network`) after its key advisory, and never TX-R.
+fn nostr_network_notice<E: Write>(args: &NostrArgs, stderr: &mut E) -> Result<(), ToolkitError> {
+    let input = crate::network_rule::Input::new(
+        crate::network_rule::RunNet::from_defaulted(args.network),
+        vec![],
+        crate::network_rule::Thing::Key,
+    );
+    crate::network_rule::enforce(&input, stderr)
+}
+
 pub fn run<R: Read, W: Write, E: Write>(
     args: &NostrArgs,
     stdin: &mut R,
@@ -196,6 +208,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             emit_import_line(stdout, &import_recipe)?;
         }
         emit_output_class_advisory(OutputClass::WatchOnly, stderr);
+        nostr_network_notice(args, stderr)?;
         return Ok(0);
     }
 
@@ -274,6 +287,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             emit_import_line(stdout, &import_recipe)?;
         }
         emit_output_class_advisory(OutputClass::PrivateKeyMaterial, stderr);
+        nostr_network_notice(args, stderr)?;
         return Ok(0);
     }
 

@@ -295,6 +295,8 @@ fn c4_slip0132_variant_octet_round_trip() {
             &format!("xpub={variant}"),
             "--to",
             "xpub",
+            "--network",
+            network,
         ]);
         assert_eq!(
             &back, want_neutral,

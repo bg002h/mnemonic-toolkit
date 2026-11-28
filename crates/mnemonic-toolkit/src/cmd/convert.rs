@@ -363,6 +363,10 @@ pub struct ConvertArgs {
     /// Emit a single JSON object on stdout instead of multi-line text.
     #[arg(long)]
     pub json: bool,
+
+    /// Go on when an origin path's coin type (0h or 1h) disagrees with its key or the network; the output is for the run's network, every path is kept as written, and a warning is printed each time.
+    #[arg(long = "accept-coin-type-mismatch")]
+    pub accept_coin_type_mismatch: bool,
 }
 
 /// SPEC v0.7 §10.a — script-type selector for the `(Xpub, Address)` edge.
@@ -1074,6 +1078,24 @@ pub fn run<R: Read, W: Write, E: Write>(
         );
     }
 
+    // 7.b) The network rule (Spec B unit 8a, R8a.3-R8a.5, R8a.13-R8a.17,
+    // R8a.24): a key source's version against the run (every `--to`, N4), an
+    // mk1's own origin coin type against its key, a seed's `--path` coin type
+    // against the run. Before any output and before step 7's advisory.
+    let rule_run = crate::network_rule::RunNet::from_opt(args.network);
+    {
+        let sources = convert_network_sources(primary.node, &primary_value, args.path.as_deref());
+        let mut input =
+            crate::network_rule::Input::new(rule_run, sources, crate::network_rule::Thing::Key);
+        // A seed typed now names no network (N6); no other input of convert
+        // is read as a kept artifact without a network (reading in the plan's
+        // implementation notes).
+        input.reads_kept = false;
+        input.seed_only = true;
+        input.accept_coin_type = args.accept_coin_type_mismatch;
+        crate::network_rule::enforce(&input, stderr)?;
+    }
+
     // 7) §2 wif→xpub sentinel warning (chain-code zeroed; not BIP-32 derivable).
     if primary.node == NodeType::Wif && targets.iter().any(|t| *t == NodeType::Xpub) {
         let _ = writeln!(
@@ -1285,10 +1307,72 @@ pub fn run<R: Read, W: Write, E: Write>(
         .filter_map(|(n, _)| convert_target_class(*n))
         .collect();
     if let Some(c) = crate::secret_advisory::worst_class_on_stdout(&classes) {
+        if c == crate::secret_advisory::OutputClass::PrivateKeyMaterial {
+            // N12: secret output can only come from secret input here.
+            crate::network_rule::record_secret_run(rule_run, true, true);
+        }
         crate::secret_advisory::emit_output_class_advisory(c, stderr);
     }
 
     Ok(0)
+}
+
+/// The network-rule sources of a convert input (Spec B unit 8a): `--from
+/// xpub=`/`xprv=`/`mk1=` is a key (`--from xpub`, ...; an mk1 carries its own
+/// origin coin), `--from wif=` a WIF, and a seed with `--path` a coin with no
+/// key (`the path <p> given with --path`). A value that does not decode is no
+/// source: compute reports it as today.
+fn convert_network_sources(
+    node: NodeType,
+    value: &str,
+    path: Option<&str>,
+) -> Vec<crate::network_rule::Source> {
+    use crate::network_rule::{key_coin, mk1_key_source, KeySource, PathWho, Source, Who};
+    let value = value.trim();
+    match node {
+        NodeType::Xpub | NodeType::Xprv => {
+            let who = format!("--from {}", node.as_str());
+            KeySource::from_text(Who::plain(who), value, vec![])
+                .map(Source::Key)
+                .into_iter()
+                .collect()
+        }
+        NodeType::Mk1 => {
+            let cleaned: String = value.chars().filter(|c| *c != '-' && *c != ',').collect();
+            let tokens: Vec<&str> = cleaned.split_whitespace().collect();
+            mk_codec::decode(&tokens)
+                .ok()
+                .map(|card| Source::Key(mk1_key_source(Who::plain("--from mk1"), &card)))
+                .into_iter()
+                .collect()
+        }
+        NodeType::Wif => {
+            // Only the version byte is kept; the decoded buffer is scrubbed.
+            let data = bitcoin::base58::decode_check(value).map(zeroize::Zeroizing::new);
+            match data.as_ref().ok().and_then(|d| d.first()) {
+                Some(128) => vec![Source::Wif {
+                    class: crate::network_rule::Class::Main,
+                    version: 128,
+                }],
+                Some(239) => vec![Source::Wif {
+                    class: crate::network_rule::Class::Test,
+                    version: 239,
+                }],
+                _ => vec![],
+            }
+        }
+        NodeType::Phrase
+        | NodeType::Seedqr
+        | NodeType::Entropy
+        | NodeType::Ms1
+        | NodeType::ElectrumPhrase => path
+            .and_then(|p| bitcoin::bip32::DerivationPath::from_str(p).ok())
+            .and_then(|p| key_coin(PathWho::Flag("--path".into()), &p))
+            .map(Source::Coin)
+            .into_iter()
+            .collect(),
+        _ => vec![],
+    }
 }
 
 /// Map a convert output NodeType to its advisory class.

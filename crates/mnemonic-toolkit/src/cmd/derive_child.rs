@@ -227,6 +227,31 @@ pub fn run<R: Read, W: Write, E: Write>(
         );
     }
 
+    // The network rule (Spec B R8a.18, R8a.19): an xprv/tprv master's version
+    // against the run, for every `--application` (N4), before any output.
+    // A phrase typed now names no network (N6).
+    let rule_run = crate::network_rule::RunNet::from_opt(args.network);
+    {
+        let sources: Vec<crate::network_rule::Source> = if args.from.node == NodeType::Xprv {
+            crate::network_rule::KeySource::from_text(
+                crate::network_rule::Who::plain("--from xprv"),
+                from_value.trim(),
+                vec![],
+            )
+            .map(crate::network_rule::Source::Key)
+            .into_iter()
+            .collect()
+        } else {
+            vec![]
+        };
+        let mut input =
+            crate::network_rule::Input::new(rule_run, sources, crate::network_rule::Thing::Key);
+        input.seed_only = args.from.node == NodeType::Phrase;
+        crate::network_rule::enforce(&input, stderr)?;
+    }
+    // N12: every in-scope application prints secret material from secret input.
+    crate::network_rule::record_secret_run(rule_run, true, false);
+
     let emit_network = args.network.unwrap_or(CliNetwork::Mainnet).network_kind();
 
     // SPEC §5 + §7 — out-of-scope apps surface byte-exact refusal here.
@@ -313,6 +338,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             // `--length`); no aggregate secret is built.
             bip85::write_dice_rolls(&master, sides, rolls, args.index, stdout)?;
             writeln!(stdout).map_err(ToolkitError::Io)?;
+            crate::network_rule::record_private_out();
             crate::secret_advisory::emit_output_class_advisory(
                 crate::secret_advisory::OutputClass::PrivateKeyMaterial,
                 stderr,
@@ -329,6 +355,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     };
 
     writeln!(stdout, "{output}").map_err(ToolkitError::Io)?;
+    crate::network_rule::record_private_out();
     // SPEC §4 — every in-scope app emits secret material; classify on stdout.
     crate::secret_advisory::emit_output_class_advisory(
         crate::secret_advisory::OutputClass::PrivateKeyMaterial,

@@ -283,6 +283,32 @@ fn network_check<E: Write>(
     crate::network_rule::enforce(&input, stderr)
 }
 
+/// The sources of restore's `--origin` and `--expect-xpub` (Spec B unit 8a,
+/// R8a.6, R8a.22, R8a.23): a typed `--origin` with an N1 coin type is a coin
+/// with no key (`the path <p> given with --origin`, run form); `--expect-xpub`
+/// is a key. A value that does not parse is left to the verb's own checks.
+fn origin_expect_sources(args: &RestoreArgs) -> Vec<crate::network_rule::Source> {
+    use crate::network_rule::{key_coin, KeySource, PathWho, Source, Who};
+    let mut out = Vec::new();
+    if let Some(x) = args.expect_xpub.as_deref() {
+        if let Some(k) = KeySource::from_text(Who::plain("--expect-xpub"), x.trim(), vec![]) {
+            out.push(Source::Key(k));
+        }
+    }
+    if let Some(o) = args.origin.as_deref() {
+        let o = o.trim();
+        let p = DerivationPath::from_str(o.trim_start_matches("m/").trim_start_matches('m'))
+            .or_else(|_| DerivationPath::from_str(o));
+        if let Some(c) = p
+            .ok()
+            .and_then(|p| key_coin(PathWho::Flag("--origin".into()), &p))
+        {
+            out.push(Source::Coin(c));
+        }
+    }
+    out
+}
+
 /// One `--cosigner @N=` value set, decoded: its 65-byte key and its source.
 struct ParsedCosigner {
     key65: [u8; 65],
@@ -678,6 +704,11 @@ pub fn run<R: Read, W: Write, E: Write>(
         Some(t) => std::slice::from_ref(t),
         None => &ALL_SINGLE_SIG,
     };
+
+    // The network rule (Spec B R8a.6, R8a.22, R8a.23): `--expect-xpub` and a
+    // typed `--origin` against the run, before any derivation or compare
+    // (`--allow-mismatch` does not pass it). The seed is typed now (N6).
+    network_check(args, origin_expect_sources(args), true, stderr)?;
 
     // Derive each selected single-sig type. The master fingerprint is
     // path-independent — identical across all four — so capture it once.
@@ -1112,6 +1143,11 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
             passphrase.as_bytes(),
         ))
     };
+
+    // The network rule (Spec B unit 2/8a): the keyless template names no
+    // network and the seed is typed now (N6); `--origin` and `--expect-xpub`
+    // are the sources, before any derivation or compare.
+    network_check(args, origin_expect_sources(args), true, stderr)?;
 
     // --- (c) derive the account key at --origin OR the template default -----
     let explicit_origin = match args.origin.as_deref() {
@@ -1705,12 +1741,9 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     // The network rule (Spec B unit 2): each `--cosigner` key against the run
     // and its own origin coin; the template itself names no network and the
     // seed is typed now (N6), so nothing else is a source.
-    network_check(
-        args,
-        template_cosigner_sources(&args.cosigner),
-        true,
-        stderr,
-    )?;
+    let mut sources = template_cosigner_sources(&args.cosigner);
+    sources.extend(origin_expect_sources(args));
+    network_check(args, sources, args.cosigner.is_empty(), stderr)?;
 
     // --- Floor 1(i): `--from` is REQUIRED + resolve the seed entropy ----------
     // Factored into the SHARED helper so verify-bundle's multisig-template path

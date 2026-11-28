@@ -165,6 +165,7 @@ mod cli_network_fail_open;
 mod cli_network_rule_build_descriptor;
 mod cli_network_rule_export_wallet;
 mod cli_network_rule_import_wallet;
+mod cli_network_rule_rest;
 mod cli_network_rule_restore;
 mod cli_network_rule_vectors;
 mod cli_non_canonical_descriptor;

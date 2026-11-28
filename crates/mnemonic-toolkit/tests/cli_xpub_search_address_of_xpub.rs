@@ -500,8 +500,9 @@ fn xpub_without_address_type_refused() {
 
 #[test]
 fn network_inference_from_tpub_prefix() {
-    // tpub neutral testnet prefix → inferred testnet. A testnet bech32
-    // address at the right path matches.
+    // Spec B unit 8a (D1): the run is --network or mainnet, so the tpub is
+    // searched on --network testnet (with no flag it is refused, TX-H1). A
+    // testnet bech32 address at the right path matches.
     let acct = account_xpub_at_testnet("m/84'/1'/0'");
     let tpub = {
         // Encode as native tpub (testnet bip32 neutral).
@@ -527,6 +528,8 @@ fn network_inference_from_tpub_prefix() {
             &target,
             "--address-type",
             "p2wpkh",
+            "--network",
+            "testnet",
             "--json",
         ])
         .assert()
@@ -534,6 +537,29 @@ fn network_inference_from_tpub_prefix() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(stdout.trim()).expect("valid JSON");
     assert_eq!(json["results"][0]["result"], "match");
+    // No --network: refused, exit 8, nothing on stdout.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "xpub-search",
+            "address-of-xpub",
+            "--xpub",
+            &tpub,
+            "--target-address",
+            &target,
+            "--address-type",
+            "p2wpkh",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(8));
+    assert!(out.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&out.stderr).lines().any(|l| l
+            == "error: network mismatch: --xpub is a test-network key (tpub), but this run is on mainnet (no --network given). Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet."),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
 
 #[test]

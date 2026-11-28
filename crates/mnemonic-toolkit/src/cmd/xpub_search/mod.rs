@@ -43,6 +43,32 @@ pub mod target_intake;
 
 // Re-export the per-mode result struct so the unit-cell-in-tests reaches it
 // via `mnemonic_toolkit::cmd::xpub_search::PathOfXpubResult`.
+/// The network rule for path-of-xpub / passphrase-of-xpub (Spec B R8a.7):
+/// `--target-xpub` against the run (`--network`, default mainnet), before
+/// any search. A target that does not resolve is left to the verb.
+pub(crate) fn target_xpub_network_check<E: Write>(
+    target_raw: &str,
+    network: crate::network::CliNetwork,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    use crate::network_rule::{xpub_key_source, Input, RunNet, Source, Thing, Who};
+    let sources: Vec<Source> = target_intake::resolve_target_xpub(target_raw)
+        .ok()
+        .map(|(x, _)| {
+            Source::Key(xpub_key_source(
+                Who::plain("--target-xpub"),
+                &x,
+                target_raw,
+                None,
+            ))
+        })
+        .into_iter()
+        .collect();
+    let mut input = Input::new(RunNet::from_defaulted(network), sources, Thing::Key);
+    input.seed_only = true;
+    crate::network_rule::enforce(&input, stderr)
+}
+
 pub use account_of_descriptor::AccountOfDescriptorResult;
 pub use address_of_xpub::AddressOfXpubResult;
 pub use passphrase_of_xpub::PassphraseOfXpubResult;

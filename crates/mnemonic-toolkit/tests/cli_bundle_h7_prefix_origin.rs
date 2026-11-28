@@ -23,7 +23,7 @@
 use assert_cmd::Command;
 use serde_json::Value;
 
-// All-zero-entropy 12-word seed (its mainnet/regtest master fingerprint is
+// All-zero-entropy 12-word seed (its mainnet master fingerprint is
 // `73c5da0a`, read from the binary's own `master_fingerprint` JSON field — not
 // hard-coded as a load-bearing literal).
 const SEED_A: &str =
@@ -31,13 +31,13 @@ const SEED_A: &str =
 // A wrong fingerprint that does NOT match SEED_A's master fp.
 const WRONG_FP: &str = "deadbeef";
 
-/// Run `bundle --network regtest --account 0 --no-engraving-card <extra...>` and
+/// Run `bundle --network mainnet --account 0 --no-engraving-card <extra...>` and
 /// return (exit-success?, stdout, stderr).
 fn run_bundle(args: &[&str]) -> (bool, String, String) {
     let mut full: Vec<String> = vec![
         "bundle".into(),
         "--network".into(),
-        "regtest".into(),
+        "mainnet".into(),
         "--account".into(),
         "0".into(),
         "--no-engraving-card".into(),
@@ -238,7 +238,7 @@ fn verify_bundle_carries_prefix_origin_through_reparse() {
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
         "--network".into(),
-        "regtest".into(),
+        "mainnet".into(),
         "--account".into(),
         "0".into(),
         "--descriptor".into(),

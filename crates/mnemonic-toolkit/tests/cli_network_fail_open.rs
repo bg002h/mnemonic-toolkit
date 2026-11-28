@@ -135,11 +135,11 @@ fn e1a_testnet_tpub_to_address_mainnet_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "E1a convert xpub→address");
-    assert!(
-        !String::from_utf8_lossy(&out.stdout).contains("address:"),
-        "no address must be emitted on stdout: {:?}",
-        out.stdout
+    // Spec B unit 8a: the network rule (TX-H1, exit 8).
+    assert_rule(
+        &out,
+        "E1a convert xpub→address",
+        &["error: network mismatch: --from xpub is a test-network key (tpub), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet."],
     );
 }
 
@@ -174,9 +174,9 @@ fn e1b_testnet_tpub_to_address_testnet_agrees_ok() {
 }
 
 #[test]
-fn e1c_testnet_tpub_to_address_no_network_infers_ok() {
-    // Over-rejection non-regression pin: the inference arm (no --network) must
-    // stay unguarded.
+fn e1c_testnet_tpub_to_address_no_network_refused() {
+    // Spec B unit 8a (D1): no --network is mainnet; the test key is refused
+    // (was: inferred from the key, exit 0).
     let out = bin()
         .args([
             "convert",
@@ -191,15 +191,10 @@ fn e1c_testnet_tpub_to_address_no_network_infers_ok() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "stderr: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&out.stdout),
-        format!("address: {TESTNET_RECEIVE_0}\n")
+    assert_rule(
+        &out,
+        "E1c convert xpub→address, no --network",
+        &["error: network mismatch: --from xpub is a test-network key (tpub), but this run is on mainnet (no --network given). Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet."],
     );
 }
 
@@ -287,7 +282,15 @@ fn e2a_testnet_tpub_mainnet_network_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "E2a xpub-search address-of-xpub");
+    // Spec B unit 8a: TX-H1 for the key, TX-H3 for the target, exit 8.
+    assert_rule(
+        &out,
+        "E2a xpub-search address-of-xpub",
+        &[
+            "error: network mismatch: --xpub is a test-network key (tpub), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet.",
+            &format!("error: network mismatch: --target-address {TESTNET_RECEIVE_0} is a signet or testnet address, but --network is mainnet. Nothing was written. Rerun with --network signet or --network testnet, or give an address of mainnet."),
+        ],
+    );
 }
 
 #[test]
@@ -335,7 +338,15 @@ fn e2_minor_mk1_target_testnet_mainnet_network_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "E2 mk1-target address-of-xpub");
+    // Spec B unit 8a: TX-H1 for the key, TX-H3 for the target, exit 8.
+    assert_rule(
+        &out,
+        "E2 mk1-target address-of-xpub",
+        &[
+            "error: network mismatch: --xpub is a test-network key (tpub), but --network is mainnet. Nothing was written. For a test wallet, rerun with --network signet, --network testnet or --network regtest. For a mainnet wallet, export the key again with the signer set to mainnet.",
+            &format!("error: network mismatch: --target-address {TESTNET_RECEIVE_0} is a signet or testnet address, but --network is mainnet. Nothing was written. Rerun with --network signet or --network testnet, or give an address of mainnet."),
+        ],
+    );
 }
 
 // ===========================================================================

@@ -163,7 +163,7 @@ pub fn run_address_of_xpub<R: Read, W: Write, E: Write>(
     args: &AddressOfXpubArgs,
     stdin: &mut R,
     stdout: &mut W,
-    _stderr: &mut E,
+    stderr: &mut E,
     _no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
     // 1) Read xpub value.
@@ -210,21 +210,33 @@ pub fn run_address_of_xpub<R: Read, W: Write, E: Write>(
         },
     };
 
-    // 5) Network resolution: explicit --network wins; else inferred from the
-    //    xpub version byte. cycle-H F3: an explicit --network must agree with
-    //    the xpub's own version bytes; the inference arm (no --network) stays
-    //    unguarded (network.rs precondition).
-    let network = match args.network {
-        Some(n) => {
-            crate::network::assert_network_agrees(
-                xpub.network,
-                n.network_kind(),
-                "xpub-search address-of-xpub",
-            )?;
-            n
+    // 5) The network rule (Spec B R8a.8): the xpub and each
+    //    `--target-address` against the run (`--network`, default mainnet;
+    //    no inference from the xpub), one TX-H3 per address (B6), before any
+    //    search. The run network is the scan's network.
+    let run = crate::network_rule::RunNet::from_opt(args.network);
+    {
+        use crate::network_rule::{xpub_key_source, AddrNet, Input, Source, Thing, Who};
+        let mut sources = vec![Source::Key(xpub_key_source(
+            Who::plain("--xpub"),
+            &xpub,
+            &xpub_value,
+            None,
+        ))];
+        for a in &args.target_address {
+            if let Some(net) = AddrNet::of_address(a.trim()) {
+                sources.push(Source::Address {
+                    who: "--target-address".into(),
+                    address: a.trim().to_string(),
+                    net,
+                });
+            }
         }
-        None => crate::address_render::network_from_xpub(&xpub),
-    };
+        let mut input = Input::new(run, sources, Thing::Key);
+        input.seed_only = true;
+        crate::network_rule::enforce(&input, stderr)?;
+    }
+    let network = run.net;
 
     // 6) Scan.
     let secp = Secp256k1::verification_only();

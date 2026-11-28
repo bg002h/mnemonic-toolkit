@@ -181,6 +181,10 @@ pub struct BundleArgs {
     /// range → exit 2.
     #[arg(long = "import-json-index", value_name = "N", requires = "import_json")]
     pub import_json_index: Option<usize>,
+
+    /// Go on when an origin path's coin type (0h or 1h) disagrees with its key or the network; the output is for the run's network, every path is kept as written, and a warning is printed each time.
+    #[arg(long = "accept-coin-type-mismatch")]
+    pub accept_coin_type_mismatch: bool,
 }
 
 /// SPEC §6.6 byte-exact mode-violation strings. Pinned for integration tests.
@@ -195,6 +199,25 @@ pub mod mode_text {
     pub const DESCRIPTOR_WITH_THRESHOLD: &str = "--threshold is meaningful only with a multisig --template; descriptor mode encodes K directly.";
     pub const DESCRIPTOR_WITH_PATH_FAMILY: &str = "--multisig-path-family is meaningful only with --template; descriptor mode encodes paths directly via @i/path syntax.";
     pub const DESCRIPTOR_WITH_NONZERO_ACCOUNT: &str = "--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.";
+}
+
+/// The network rule for a bundle run (Spec B unit 8a): refuse (exit 8) or
+/// print its warnings. `--network` is required, so the run is always given.
+fn network_check<E: Write>(
+    args: &BundleArgs,
+    sources: Vec<crate::network_rule::Source>,
+    thing: crate::network_rule::Thing,
+    seed_only: bool,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let mut input = crate::network_rule::Input::new(
+        crate::network_rule::RunNet::new(args.network, true),
+        sources,
+        thing,
+    );
+    input.seed_only = seed_only;
+    input.accept_coin_type = args.accept_coin_type_mismatch;
+    crate::network_rule::enforce(&input, stderr)
 }
 
 pub fn run<W: Write, E: Write>(
@@ -342,6 +365,7 @@ pub fn run<W: Write, E: Write>(
         });
     }
 
+    let mut placeholder_coins: Vec<crate::network_rule::Source> = Vec::new();
     if descriptor_mode {
         // Read the descriptor body here (the read inside bundle_run_unified_descriptor
         // is off the Concrete early-fork path).
@@ -374,10 +398,56 @@ pub fn run<W: Write, E: Write>(
         };
         use crate::wallet_import::pipeline::{classify_descriptor_form, DescriptorForm};
         if classify_descriptor_form(&body)? == DescriptorForm::Concrete {
+            // The network rule (Spec B R8a.1, R8a.2): every key and origin
+            // coin type of the descriptor against the run, before any card.
+            let bare = body.split('#').next().unwrap_or(&body);
+            let expanded = crate::parse_descriptor::expand_literal_double_star(bare);
+            let sources = crate::parse_descriptor::parse_descriptor_lenient(expanded.as_ref())
+                .map(|d| crate::network_rule::descriptor_sources(expanded.as_ref(), &d))
+                .unwrap_or_default();
+            network_check(
+                args,
+                sources,
+                crate::network_rule::Thing::Descriptor,
+                false,
+                stderr,
+            )?;
             return bundle_run_concrete_descriptor(args, body, stdout, stderr);
         }
         // AtN: fall through to bundle_run_unified (re-reads the file as today).
+        // A placeholder's typed origin (`@N[fp/path]`, `[fp/path]@N`) is a
+        // coin source (as export-wallet --descriptor), named `key @N`; a lex
+        // failure is left to the descriptor path's own error.
+        let expanded = crate::parse_descriptor::expand_literal_double_star(&body);
+        placeholder_coins = crate::parse_descriptor::lex_placeholders(expanded.as_ref())
+            .map(|occs| {
+                occs.iter()
+                    .filter_map(|o| {
+                        let path = o.origin_path_anno.as_ref()?;
+                        crate::network_rule::key_coin(
+                            crate::network_rule::PathWho::Named(crate::network_rule::Who::key(
+                                o.i as usize,
+                            )),
+                            path,
+                        )
+                    })
+                    .map(crate::network_rule::Source::Coin)
+                    .collect()
+            })
+            .unwrap_or_default();
     }
+
+    // The network rule (Spec B R8a.10, R8a.12; 8b `--slot @N.xpub=`): each
+    // slot's key, WIF and typed `@N.path` coin type against the run, before
+    // the slots resolve. A run of seed slots only is a seed typed now (N6).
+    let mut sources = crate::network_rule::slot_sources(&args.slot);
+    sources.extend(placeholder_coins);
+    let thing = if descriptor_mode {
+        crate::network_rule::Thing::Descriptor
+    } else {
+        crate::network_rule::Thing::Key
+    };
+    network_check(args, sources, thing, !descriptor_mode, stderr)?;
 
     bundle_run_unified(args, stdin, stdout, stderr)
 }
@@ -1109,6 +1179,12 @@ fn emit_unified<W: Write, E: Write>(
     // slot is non-empty (BIP-39 entropy on stdout); WatchOnly otherwise
     // (all ms1 == "" sentinels per §5.8). Always fires (Option never None).
     let cls = if bundle.any_secret_bearing() {
+        // N12: an ms1 on stdout comes from a seed read by this run.
+        crate::network_rule::record_secret_run(
+            crate::network_rule::RunNet::new(args.network, true),
+            true,
+            true,
+        );
         crate::secret_advisory::OutputClass::PrivateKeyMaterial
     } else {
         crate::secret_advisory::OutputClass::WatchOnly
@@ -2103,6 +2179,20 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     })?;
     let descriptor_body = descriptor_body_no_csum(descriptor_with_csum, "--import-json")?;
 
+    // The network rule (Spec B unit 8a, I-7; 8b: FIX #45's refusal moves to
+    // TX-H4): the envelope's stated network against the run (TX-H4) and its
+    // own keys (TX-H4C), its keys' origin coin types against their keys
+    // (TX-S), before the mk1 cards decode.
+    if let Some(src) = crate::wallet_import::json_envelope::envelope_source(value, &envelope) {
+        network_check(
+            args,
+            vec![src],
+            crate::network_rule::Thing::Descriptor,
+            false,
+            stderr,
+        )?;
+    }
+
     // Decode mk1 chunks per §3.6.1 → ResolvedSlots (entropy=None). v0.27.1
     // Phase 2 I5 fold: stderr carries the origin_fingerprint substitution
     // NOTICE if any mk1 card omits the master fingerprint.
@@ -2114,27 +2204,6 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     // mainnet on the bundle subcommand; we use envelope.network as the
     // source-of-truth for the consumer path).
     let envelope_network = cli_network_from_str(&envelope.bundle.network)?;
-    // FIX #45: the required --network must agree with the envelope.
-    if args.network != envelope_network {
-        let flag = args.network.human_name();
-        let env = envelope_network.human_name();
-        // An envelope imported without `--network` records every coin-type-1
-        // wallet as testnet, so signet/regtest against it gets the longer text.
-        let same_class = matches!(envelope_network, CliNetwork::Testnet)
-            && matches!(args.network, CliNetwork::Signet | CliNetwork::Regtest);
-        return Err(ToolkitError::BadInput(if same_class {
-            format!(
-                "--network {flag} disagrees with the --import-json envelope's bundle.network \
-                 ({env}); if the wallet is on {flag}, re-create the envelope with import-wallet \
-                 --network {flag} from the same blob, otherwise re-run with --network {env}"
-            )
-        } else {
-            format!(
-                "--network {flag} disagrees with the --import-json envelope's bundle.network \
-                 ({env}); re-run with --network {env}"
-            )
-        }));
-    }
     let secp = Secp256k1::new();
 
     // §3.6 — decode envelope's ms1[i] != "" entries first (envelope-
@@ -3072,6 +3141,7 @@ mod self_check_ms1_tests {
             md1_form: crate::synthesize::Md1Form::Policy,
             import_json: None,
             import_json_index: None,
+            accept_coin_type_mismatch: false,
         }
     }
 
@@ -3261,6 +3331,7 @@ mod self_check_mk1_xpub_binding_tests {
             md1_form: crate::synthesize::Md1Form::Policy,
             import_json: None,
             import_json_index: None,
+            accept_coin_type_mismatch: false,
         }
     }
 

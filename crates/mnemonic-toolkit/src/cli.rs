@@ -263,8 +263,10 @@ pub fn run() -> ExitCode {
         Ok(code) => {
             // N12: TX-R, the last line of a test-network run that printed
             // secret material made from a seed, after every advisory.
+            // It prints before `finish_exit`, so a stdout write error stays
+            // the last line (T6).
             if let Some(line) = crate::network_rule::take_tx_r() {
-                trailer.push(line.text);
+                let _ = writeln!(io::stderr(), "{}", line.text);
             }
             code
         }
