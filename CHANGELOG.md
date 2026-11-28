@@ -8,6 +8,31 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `convert --phrase-out-dir` saves the words to an owner-only file
+
+- **`convert --phrase-out-dir <DIR>`** (new): writes the `phrase` output to a new `0600` file in an existing `DIR`
+  instead of stdout, named `seed-<local date>-<fp>[-<fp-pass>][-<language>].txt`, where `<fp>` is the master
+  fingerprint of the words with an empty passphrase (no `--template` needed) and `<language>` is the language the
+  words are in (an ms1 `mnem` card's wins over `--language`). The file holds the bare words and one newline, so
+  `bundle --slot @0.phrase=-` and `ms encode --in` read it back. It never replaces anything: the same words already
+  at the name print `already saved` (exit 0, untouched); anything else there (other contents, a symlink, a FIFO, a
+  directory) is refused with the new `PhraseFileExists` (exit 1). The phrase is not printed, the file is written
+  before any stdout byte, and `--group-size` groups only a printed card. Warnings for a mode the filesystem did not
+  restrict, for Windows, and for a group- or world-writable `DIR`; notes for another day's copy of the same seed and
+  a leftover `seed-tmp-*.txt`. Needs `--to phrase`; a missing `DIR`, a file or `-` is exit 1.
+- **`convert --name-with-passphrase-fp`** (new, requires `--phrase-out-dir`; exit 64 without it): adds the
+  passphrase-applied fingerprint after the raw one. Needs a non-empty `--passphrase` (exit 1). It gives anyone
+  holding the file an offline passphrase checker, which `--help` says.
+- **`convert --from phrase= --to phrase`** is admitted under `--phrase-out-dir` (the words re-rendered canonically).
+  Without the flag it stays refused, byte-identical (exit 2).
+- **`convert --json`**: under `--phrase-out-dir` the envelope's `schema_version` is `"2"` and the phrase entry is
+  `{"node":"phrase","path":…,"already_saved":…}` with no `value`. Without the flag the envelope is byte-identical
+  (`"1"`).
+- **`convert --from phrase=`/`seedqr=`** no longer panic (exit 101) on a phrase made only of words the English and
+  French lists share; the entropy is read in the parsed language (F-579, converged from ms-cli). Other verbs:
+  FOLLOWUP `f579-to-entropy-remaining-sites`.
+- Windows builds gain a direct `windows-sys` dependency (0.61.2, already locked and vendored) for `GetLocalTime`.
+
 ### Huge `--length` and account-window values are refused or streamed, not aborted
 
 - **`derive-child --application dice`**: the rolls are written as they are drawn, so every `--length` in

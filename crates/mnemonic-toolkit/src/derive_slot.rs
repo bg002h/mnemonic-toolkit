@@ -33,6 +33,61 @@ pub fn derive_master_seed(mnemonic: &Mnemonic, passphrase: &str) -> Zeroizing<[u
     Zeroizing::new(mnemonic.to_seed(passphrase))
 }
 
+/// The entropy behind `mnemonic`, read back in a KNOWN language (F-579
+/// convergence from ms-cli `cmd::encode::entropy_in_language`).
+///
+/// `bip39::Mnemonic::to_entropy` re-detects the language and unwraps, which
+/// panics for a mnemonic whose every word lies in two wordlists (the 100-word
+/// English/French intersection), even under `--language english`. This mirrors
+/// the crate's bit-packing with the language passed in, not guessed.
+/// `find_word` cannot fail for a mnemonic `parse_in(lang, ..)` accepted; it is
+/// handled anyway, and an empty result fails cleanly downstream.
+pub(crate) fn entropy_in_language(mnemonic: &Mnemonic, lang: Bip39Language) -> Zeroizing<Vec<u8>> {
+    let mut entropy = Zeroizing::new([0u8; 33]);
+    let (mut cursor, mut offset, mut remainder) = (0usize, 0u32, 0u32);
+    let mut words = 0usize;
+    for word in mnemonic.words() {
+        words += 1;
+        let Some(idx) = lang.find_word(word) else {
+            return Zeroizing::new(Vec::new());
+        };
+        remainder |= ((idx as u32) << (32 - 11)) >> offset;
+        offset += 11;
+        while offset >= 8 {
+            entropy[cursor] = (remainder >> 24) as u8;
+            cursor += 1;
+            remainder <<= 8;
+            offset -= 8;
+        }
+    }
+    if offset != 0 {
+        entropy[cursor] = (remainder >> 24) as u8;
+    }
+    Zeroizing::new(entropy[..(words / 3) * 4].to_vec())
+}
+
+/// The BIP-32 master fingerprint of `words` (in `language`) under
+/// `passphrase`: NFKD, BIP-39 PBKDF2 to the seed, the master key, the first 4
+/// bytes of HASH160 of its public key; 8 lowercase hex. Template-free and
+/// network-free (a master fingerprint depends on neither), so it equals `--to
+/// fingerprint` with the same passphrase. `convert --phrase-out-dir` names its
+/// file with it.
+pub(crate) fn master_fingerprint_of_words(
+    words: &str,
+    language: Bip39Language,
+    passphrase: &str,
+) -> Result<String, ToolkitError> {
+    // SAFETY: third-party-blocked — `bip39::Mnemonic` + `bitcoin::bip32::Xpriv`
+    // have no Drop+Zeroize (FOLLOWUPS `rust-bip39-mnemonic-zeroize-upstream`,
+    // `rust-bitcoin-xpriv-zeroize-upstream`); the seed is `Zeroizing`.
+    let mnemonic = Mnemonic::parse_in(language, words).map_err(ToolkitError::Bip39)?;
+    let seed = derive_master_seed(&mnemonic, passphrase);
+    let secp = Secp256k1::new();
+    let master = Xpriv::new_master(bitcoin::NetworkKind::Main, &seed[..])
+        .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+    Ok(master.fingerprint(&secp).to_string().to_lowercase())
+}
+
 /// entropy → derive at the template's default path → `DerivedAccount`.
 ///
 /// Thin wrapper over [`derive_bip32_from_entropy_at_path`]: it resolves the
@@ -612,5 +667,45 @@ mod scrub_tests {
             dbg.contains("redacted"),
             "Debug should mark redaction: {dbg}"
         );
+    }
+}
+
+#[cfg(test)]
+mod phrase_out_dir_tests {
+    use super::*;
+
+    const PHRASE12: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    /// F-579 fixture: every word is in the English and French lists.
+    const AMBIGUOUS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon surface";
+
+    #[test]
+    fn entropy_in_language_reads_an_ambiguous_phrase() {
+        let m = Mnemonic::parse_in(Bip39Language::English, AMBIGUOUS).unwrap();
+        let mut want = vec![0u8; 32];
+        want[31] = 0x06;
+        assert_eq!(*entropy_in_language(&m, Bip39Language::English), want);
+        let m = Mnemonic::parse_in(Bip39Language::English, PHRASE12).unwrap();
+        assert_eq!(
+            *entropy_in_language(&m, Bip39Language::English),
+            m.to_entropy()
+        );
+    }
+
+    #[test]
+    fn entropy_in_language_round_trips_every_language_at_24_words() {
+        // Public BIP-39 vector entropy 0x7f..7f (32 bytes) in every wordlist.
+        let ent = [0x7fu8; 32];
+        for lang in Bip39Language::ALL.iter().copied() {
+            let m = Mnemonic::from_entropy_in(lang, &ent).unwrap();
+            assert_eq!(*entropy_in_language(&m, lang), ent.to_vec(), "{lang:?}");
+        }
+    }
+
+    #[test]
+    fn master_fingerprint_of_words_is_template_and_network_free() {
+        let fp = master_fingerprint_of_words(PHRASE12, Bip39Language::English, "").unwrap();
+        assert_eq!(fp, "73c5da0a");
+        let fp = master_fingerprint_of_words(PHRASE12, Bip39Language::English, "TREZOR").unwrap();
+        assert_eq!(fp, "b4e3f5ed");
     }
 }

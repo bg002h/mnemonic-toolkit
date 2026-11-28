@@ -1153,7 +1153,73 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--json` | JSON output |
 | `--group-size <N>` | insert a separator every N characters in an emitted ms1 or mk1 card (default `0` = unbroken). Display only; `--json` and non-card outputs (xpub, WIF, …) stay unbroken |
 | `--separator <SEPARATOR>` | the grouping separator: `space` (keyword, the default) or the literal `" "`. Whitespace only — `hyphen` and `comma` are refused |
+| `--phrase-out-dir <DIR>` | write the `phrase` output to a new owner-only (`0600`) file in `DIR` instead of stdout; see [Saving the words to a file](#convert-phrase-out-dir). Needs `--to phrase` (exit 1 otherwise). `DIR` must already exist and is never created; missing, not a directory, or `-` is exit 1; a symlink to a directory is followed. Admits `--from phrase=…` with `--to phrase` (the words re-rendered canonically), which stays refused (exit 2) without the flag. Never replaces anything. Under `--json` the envelope's `schema_version` is `"2"` |
+| `--name-with-passphrase-fp` | add the passphrase-applied master fingerprint to the `--phrase-out-dir` file name, after the raw one. Requires `--phrase-out-dir` (exit 64 without it) and a non-empty `--passphrase` (exit 1). **It gives anyone holding the file an offline passphrase checker**: the file holds the words and the name holds the target |
 | `--help` | print help |
+
+### Saving the words to a file (`--phrase-out-dir`) {#convert-phrase-out-dir}
+
+`convert` never draws randomness; `--phrase-out-dir` saves words you already
+have (typed, from your own entropy, from an ms1 card, from `final-word`) to a
+file that reads straight back. Inputs: `phrase`, `seedqr`, `entropy`, `ms1`.
+
+- **Name.** `seed-<YYYY-MM-DD>-<fp>[-<fp-pass>][-<language>].txt`. The date
+  is today in the machine's local time zone (if the Unix local-time call
+  fails, the UTC date and `note: local time zone unavailable; file date is
+  UTC`). `<fp>` is the BIP-32 master fingerprint of the words written with an
+  empty passphrase (what `--to fingerprint` prints without `--passphrase`;
+  `73c5da0a` for the all-zero test seed); no `--template` or `--network` is
+  needed. `<fp-pass>` appears only with `--name-with-passphrase-fp`.
+  `<language>` appears when the words are not English and is the language
+  they are in (an ms1 `mnem` card's own language wins over `--language`),
+  spelled as the toolkit's `--language` value (`japanese`,
+  `simplifiedchinese`, …). ms-cli spells the Chinese lists
+  `chinese-simplified` / `chinese-traditional`.
+- **Contents.** The words, single ASCII spaces, then one newline. No label.
+- **Never replaces anything.** The same words already at the name print
+  `already saved: <path>` and exit 0 with the file untouched. Anything else
+  at the name (other contents, a symlink, a FIFO, a directory) is refused
+  (exit 1, `PhraseFileExists`) and nothing is written.
+- **stdout and stderr.** The phrase is not printed; other `--to` targets
+  print as usual, after the file is written (a failed write prints nothing on
+  stdout). `--to phrase` given twice writes one file. `--group-size` groups a
+  printed ms1 card, never the file. stderr says `saved phrase to <path>
+  (fingerprint <fp>, without passphrase)`, or with the flag `(fingerprint <fp>
+  without passphrase, <fp-pass> with it)`.
+- **`--json`.** `schema_version` is `"2"` under `--phrase-out-dir` and the
+  phrase entry is `{"node":"phrase","path":"<path>","already_saved":<bool>}`
+  (no `value`), once however many times `--to phrase` is given. Without the
+  flag the envelope is unchanged (`"1"`).
+- **Passphrase.** Without `--name-with-passphrase-fp` the passphrase plays no
+  part in the file or its name (and the usual `--passphrase ignored on this
+  edge` warning prints where it did before). The passphrase is never written.
+- **Warnings.** A file whose mode the filesystem does not restrict (vfat,
+  exFAT, SMB and FUSE mounts set modes from mount options) or any run on
+  Windows prints `warning: file permissions not restricted …; protect <path>`.
+  A group- or world-writable `DIR` warns. Another day's `seed-*-<fp>*.txt` or a
+  leftover `seed-tmp-*.txt` in `DIR` is noted.
+- **Leftover temporary file.** A kill during the write can leave
+  `seed-tmp-<pid>-<k>.txt` (0600, holding the words) in `DIR`; delete it.
+- **What a file is.** A 0600 file is still a plaintext seed: backups, sync,
+  root and any process running as you can read it, and the fingerprint in its
+  name links it to your wallet for anyone who sees the name. For a durable
+  backup encode it with `ms encode` and engrave the card.
+
+```sh
+mnemonic convert --from entropy=- --to phrase --phrase-out-dir ~/seeds < my-entropy.hex
+mnemonic convert --from phrase=- --to phrase --phrase-out-dir ~/seeds
+mnemonic convert --from ms1=- --to phrase --to ms1 --group-size 5 --phrase-out-dir ~/seeds
+PP='…' mnemonic convert --from phrase=- --to phrase --phrase-out-dir ~/seeds \
+  --passphrase @env:PP --name-with-passphrase-fp
+
+# reading it back (one stdin, so a passphrase comes through @env:)
+mnemonic bundle --network mainnet --template bip84 --slot @0.phrase=- < ~/seeds/seed-2026-11-28-xxxxxxxx.txt
+PP='…' mnemonic bundle --network mainnet --template bip84 --passphrase @env:PP \
+  --slot @0.phrase=- < ~/seeds/seed-2026-11-28-xxxxxxxx-yyyyyyyy.txt
+mnemonic bundle --network mainnet --template bip84 --language japanese \
+  --slot @0.phrase=- < ~/seeds/seed-2026-11-28-xxxxxxxx-japanese.txt
+ms encode --in ~/seeds/seed-2026-11-28-xxxxxxxx.txt
+```
 
 ### Worked example
 

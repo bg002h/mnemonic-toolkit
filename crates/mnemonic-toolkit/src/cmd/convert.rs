@@ -363,6 +363,31 @@ pub struct ConvertArgs {
     /// Emit a single JSON object on stdout instead of multi-line text.
     #[arg(long)]
     pub json: bool,
+
+    /// Write the `phrase` output to a NEW owner-only (0600 on Unix; Windows
+    /// and some mounts cannot restrict it, and say so) file in DIR instead of
+    /// stdout, named `seed-<local date>-<fingerprint>[-<passphrase
+    /// fingerprint>][-<language>].txt`.
+    /// Needs `--to phrase`. DIR must already exist and is never created; a
+    /// symlink to a directory is followed. The file holds the bare words and
+    /// one newline (`bundle --slot @0.phrase=- < FILE` and `ms encode --in
+    /// FILE` read it back). Nothing is ever replaced: the same words already at
+    /// the name are left as they are ("already saved"); anything else there is
+    /// refused. The fingerprint in the name links the file to the wallet for
+    /// anyone who sees the name. The file is a plaintext seed on disk: backups,
+    /// sync, root and any process running as you can read it; for a durable
+    /// backup, encode it with `ms encode` and engrave the card.
+    #[arg(long = "phrase-out-dir", value_name = "DIR")]
+    pub phrase_out_dir: Option<std::path::PathBuf>,
+
+    /// Add the passphrase-applied master fingerprint to the --phrase-out-dir
+    /// file name, after the raw one. Needs a non-empty --passphrase, which is
+    /// never written to the file or the name. WARNING: it gives anyone holding
+    /// the file an offline passphrase checker (the file holds the words and the
+    /// name holds the target), so a weak passphrase stops protecting a stolen
+    /// file.
+    #[arg(long = "name-with-passphrase-fp", requires = "phrase_out_dir")]
+    pub name_with_passphrase_fp: bool,
 }
 
 /// SPEC v0.7 §10.a — script-type selector for the `(Xpub, Address)` edge.
@@ -464,7 +489,13 @@ struct ConvertJson<'a> {
 #[derive(Serialize)]
 struct ConvertJsonEntry<'a> {
     node: &'a str,
-    value: String,
+    // `None` only for the `--phrase-out-dir` phrase entry (schema "2").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    already_saved: Option<bool>,
 }
 
 // ============================================================================
@@ -994,8 +1025,16 @@ pub fn run<R: Read, W: Write, E: Write>(
         ));
     }
 
+    // SPEC_convert_phrase_out_dir §2.1 — `(Phrase, Phrase)` is admitted only
+    // under `--phrase-out-dir` (it re-renders the typed words canonically);
+    // without the flag the identity-barrier refusal stays byte-identical.
+    let out_dir: Option<&std::path::Path> = args.phrase_out_dir.as_deref();
+
     // 4) §3 refusal pre-check.
     for &t in &targets {
+        if out_dir.is_some() && primary.node == NodeType::Phrase && t == NodeType::Phrase {
+            continue;
+        }
         if let Some(e) = classify_edge(primary.node, t) {
             return Err(e);
         }
@@ -1036,6 +1075,27 @@ pub fn run<R: Read, W: Write, E: Write>(
         return Err(refusal_bip38_no_passphrase());
     }
 
+    // 5.c) SPEC_convert_phrase_out_dir §2.5 — `--phrase-out-dir` refusals,
+    //      before anything is computed or written.
+    if let Some(dir) = out_dir {
+        if !targets.contains(&NodeType::Phrase) {
+            return Err(ToolkitError::BadInput(
+                "--phrase-out-dir needs --to phrase (it saves the phrase output to a file)".into(),
+            ));
+        }
+        if args.name_with_passphrase_fp
+            && effective_passphrase.as_deref().is_none_or(|p| p.is_empty())
+        {
+            return Err(ToolkitError::BadInput(
+                "--name-with-passphrase-fp needs a non-empty --passphrase (the second fingerprint is the passphrase-applied one)".into(),
+            ));
+        }
+        crate::phrase_file::check_dir(dir)?;
+        if let Some(w) = crate::phrase_file::dir_writable_warning(dir) {
+            let _ = writeln!(stderr, "{w}");
+        }
+    }
+
     // 6) §8 --passphrase warning when not on PBKDF2 edge.
     //    SPEC-A v0.6.1: `Wif` joins the PBKDF2-bearing target set so
     //    `--from phrase --to wif --passphrase x` does NOT spuriously
@@ -1058,7 +1118,9 @@ pub fn run<R: Read, W: Write, E: Write>(
     });
     // SPEC v0.7 §12 — BIP-38 uses Scrypt (not PBKDF2) but the passphrase IS
     // meaningful; suppress the "ignored" warning for BIP-38 edges.
-    let edge_uses_passphrase = edge_uses_pbkdf2 || bip38_edge;
+    // SPEC_convert_phrase_out_dir §2.4 — `--name-with-passphrase-fp` uses the
+    // passphrase for the file name's second fingerprint.
+    let edge_uses_passphrase = edge_uses_pbkdf2 || bip38_edge || args.name_with_passphrase_fp;
     if effective_passphrase.is_some() && !edge_uses_passphrase {
         let _ = writeln!(
             stderr,
@@ -1097,48 +1159,49 @@ pub fn run<R: Read, W: Write, E: Write>(
         pbkdf2_passphrase,
         bip38_passphrase,
     );
-    let (mut outputs, input_variant, electrum_seed_version, path_hint) = match computed {
-        Ok(o) => o,
-        Err(orig) => {
-            // v0.22.0 auto-fire — on Ms1 / Mk1 sibling-codec decode failures,
-            // attempt BCH correction and short-circuit with exit 5 on success.
-            // Falls through to typed `orig` if repair fails or the original
-            // error wasn't a decode-class failure. Per D6 / §2.5 standalone
-            // `repair` subcommand ignores --no-auto-repair; here we honor it.
-            // v0.25.0 §2.B — use `effective_no_auto_repair` (TTY-aware) so
-            // piped invocations skip auto-fire by default; see top-of-fn.
-            if !effective_no_auto_repair {
-                let repair_kind = match primary.node {
-                    NodeType::Ms1 => Some(crate::repair::CardKind::Ms1),
-                    NodeType::Mk1 => Some(crate::repair::CardKind::Mk1),
-                    _ => None,
-                };
-                let is_codec_decode_err =
-                    matches!(&orig, ToolkitError::MsCodec(_) | ToolkitError::MkCodec(_));
-                if let (Some(kind), true) = (repair_kind, is_codec_decode_err) {
-                    let chunks: Vec<String> = if kind == crate::repair::CardKind::Mk1 {
-                        primary_value
-                            .split_whitespace()
-                            .map(|s| s.to_string())
-                            .collect()
-                    } else {
-                        // cycle-14 (L22): Deref Zeroizing<String> → owned String
-                        // so both arms unify to Vec<String> (no behavior change).
-                        vec![primary_value.to_string()]
+    let (mut outputs, input_variant, electrum_seed_version, path_hint, phrase_language) =
+        match computed {
+            Ok(o) => o,
+            Err(orig) => {
+                // v0.22.0 auto-fire — on Ms1 / Mk1 sibling-codec decode failures,
+                // attempt BCH correction and short-circuit with exit 5 on success.
+                // Falls through to typed `orig` if repair fails or the original
+                // error wasn't a decode-class failure. Per D6 / §2.5 standalone
+                // `repair` subcommand ignores --no-auto-repair; here we honor it.
+                // v0.25.0 §2.B — use `effective_no_auto_repair` (TTY-aware) so
+                // piped invocations skip auto-fire by default; see top-of-fn.
+                if !effective_no_auto_repair {
+                    let repair_kind = match primary.node {
+                        NodeType::Ms1 => Some(crate::repair::CardKind::Ms1),
+                        NodeType::Mk1 => Some(crate::repair::CardKind::Mk1),
+                        _ => None,
                     };
-                    // try_repair_and_short_circuit is always-Err on
-                    // repair-success; `?` propagates RepairShortCircuit
-                    // (exit 5) up to main.rs's special-case. v0.22.1 D20:
-                    // pass `args.json` so the auto-fire emits a JSON
-                    // envelope on stdout when the caller expected JSON.
-                    crate::repair::try_repair_and_short_circuit(
-                        kind, &chunks, stdout, stderr, args.json,
-                    )?;
+                    let is_codec_decode_err =
+                        matches!(&orig, ToolkitError::MsCodec(_) | ToolkitError::MkCodec(_));
+                    if let (Some(kind), true) = (repair_kind, is_codec_decode_err) {
+                        let chunks: Vec<String> = if kind == crate::repair::CardKind::Mk1 {
+                            primary_value
+                                .split_whitespace()
+                                .map(|s| s.to_string())
+                                .collect()
+                        } else {
+                            // cycle-14 (L22): Deref Zeroizing<String> → owned String
+                            // so both arms unify to Vec<String> (no behavior change).
+                            vec![primary_value.to_string()]
+                        };
+                        // try_repair_and_short_circuit is always-Err on
+                        // repair-success; `?` propagates RepairShortCircuit
+                        // (exit 5) up to main.rs's special-case. v0.22.1 D20:
+                        // pass `args.json` so the auto-fire emits a JSON
+                        // envelope on stdout when the caller expected JSON.
+                        crate::repair::try_repair_and_short_circuit(
+                            kind, &chunks, stdout, stderr, args.json,
+                        )?;
+                    }
                 }
+                return Err(orig);
             }
-            return Err(orig);
-        }
-    };
+        };
 
     // v0.37.11 — non-English BIP-39 wordlist advisory (path A of the `mnem`
     // footgun): a language-agnostic target — raw entropy OR an ms1 card — drops
@@ -1235,6 +1298,21 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
 
+    // 8.b) SPEC_convert_phrase_out_dir §2.2 — the file write (or the "already
+    //      saved" verdict) happens before a single stdout byte. The phrase
+    //      leaves `outputs`, so it is never printed and the stdout
+    //      private-material advisory below no longer counts it.
+    let saved = match out_dir {
+        Some(dir) => Some(save_phrase_file(
+            dir,
+            &mut outputs,
+            phrase_language,
+            args.name_with_passphrase_fp.then_some(pbkdf2_passphrase),
+            stderr,
+        )?),
+        None => None,
+    };
+
     // 9) Emit.
     if args.json {
         // v0.34.5: redact via the WIDER `is_argv_secret_bearing` (adds MiniKey,
@@ -1245,15 +1323,30 @@ pub fn run<R: Read, W: Write, E: Write>(
         } else {
             Some(primary_value.as_str())
         };
-        let entries: Vec<ConvertJsonEntry> = outputs
+        let mut entries: Vec<ConvertJsonEntry> = outputs
             .iter()
             .map(|(node, value)| ConvertJsonEntry {
                 node: node.as_str(),
-                value: value.clone(),
+                value: Some(value.clone()),
+                path: None,
+                already_saved: None,
             })
             .collect();
+        // One phrase entry however many times `--to phrase` was given, at the
+        // first phrase target's position; schema "2" only under the flag.
+        if let Some(sv) = &saved {
+            entries.insert(
+                sv.index.min(entries.len()),
+                ConvertJsonEntry {
+                    node: NodeType::Phrase.as_str(),
+                    value: None,
+                    path: Some(sv.path.clone()),
+                    already_saved: Some(sv.already_saved),
+                },
+            );
+        }
         let env = ConvertJson {
-            schema_version: "1",
+            schema_version: if saved.is_some() { "2" } else { "1" },
             from_node: primary.node.as_str(),
             from_value,
             to: entries,
@@ -1291,6 +1384,118 @@ pub fn run<R: Read, W: Write, E: Write>(
     Ok(0)
 }
 
+/// What `--phrase-out-dir` did, for the JSON envelope.
+struct SavedPhrase {
+    path: String,
+    already_saved: bool,
+    /// Position of the first `phrase` target among the outputs.
+    index: usize,
+}
+
+/// SPEC_convert_phrase_out_dir §3/§4: take the `phrase` outputs out of
+/// `outputs`, name the file, write it (never replacing anything) and report on
+/// stderr. `passphrase` is `Some` only under `--name-with-passphrase-fp`.
+fn save_phrase_file<E: Write>(
+    dir: &std::path::Path,
+    outputs: &mut Vec<Output>,
+    language: Option<bip39::Language>,
+    passphrase: Option<&str>,
+    stderr: &mut E,
+) -> Result<SavedPhrase, ToolkitError> {
+    use crate::phrase_file;
+    let index = outputs
+        .iter()
+        .position(|(n, _)| *n == NodeType::Phrase)
+        .ok_or_else(|| ToolkitError::BadInput("--phrase-out-dir needs --to phrase".into()))?;
+    let mut words: Option<zeroize::Zeroizing<String>> = None;
+    let mut kept = Vec::with_capacity(outputs.len());
+    for (n, v) in outputs.drain(..) {
+        if n == NodeType::Phrase {
+            let v = zeroize::Zeroizing::new(v);
+            if words.is_none() {
+                words = Some(v);
+            }
+        } else {
+            kept.push((n, v));
+        }
+    }
+    *outputs = kept;
+    let words = words.expect("index found a phrase output");
+    let _pin_words = mnemonic_toolkit::mlock::pin_pages_for(words.as_bytes());
+    let language = language.ok_or_else(|| {
+        ToolkitError::BadInput("--phrase-out-dir: no wordlist for the phrase output".into())
+    })?;
+
+    // §3: the fingerprints are of the words actually written.
+    let fp = crate::derive_slot::master_fingerprint_of_words(&words, language, "")?;
+    let fp_pass = match passphrase {
+        Some(p) => Some(crate::derive_slot::master_fingerprint_of_words(
+            &words, language, p,
+        )?),
+        None => None,
+    };
+    let suffix = (language != bip39::Language::English)
+        .then(|| crate::language::wire_code_to_cli(crate::language::bip39_to_wire_code(language)))
+        .flatten()
+        .and_then(|l| clap::ValueEnum::to_possible_value(&l))
+        .map(|v| v.get_name().to_string());
+    let (date, note) = phrase_file::today();
+    if let Some(n) = note {
+        let _ = writeln!(stderr, "{n}");
+    }
+    let name = phrase_file::file_name(&date, &fp, fp_pass.as_deref(), suffix.as_deref());
+    for n in phrase_file::stale_copy_notes(dir, &fp, &name) {
+        let _ = writeln!(stderr, "{n}");
+    }
+
+    // §4: the words as rust-bip39 renders them, then one `\n`.
+    let mut bytes: zeroize::Zeroizing<Vec<u8>> =
+        zeroize::Zeroizing::new(Vec::with_capacity(words.len() + 1));
+    bytes.extend_from_slice(words.as_bytes());
+    bytes.push(b'\n');
+    let _pin_bytes = mnemonic_toolkit::mlock::pin_pages_for(&bytes);
+
+    let outcome = phrase_file::write_new(dir, &name, &bytes, phrase_file::Faults::default())?;
+    let path = dir.join(&name);
+    let (already_saved, mode) = match outcome {
+        phrase_file::Outcome::Written { mode, leftover } => {
+            let _ = match &fp_pass {
+                None => writeln!(
+                    stderr,
+                    "saved phrase to {} (fingerprint {fp}, without passphrase)",
+                    path.display()
+                ),
+                Some(fpp) => writeln!(
+                    stderr,
+                    "saved phrase to {} (fingerprint {fp} without passphrase, {fpp} with it)",
+                    path.display()
+                ),
+            };
+            if let Some(t) = leftover {
+                let _ = writeln!(
+                    stderr,
+                    "warning: could not remove the temporary copy {}; delete it (it holds the words)",
+                    t.display()
+                );
+            }
+            (false, mode)
+        }
+        phrase_file::Outcome::AlreadySaved { mode } => {
+            let _ = writeln!(stderr, "already saved: {}", path.display());
+            (true, mode)
+        }
+    };
+    if let Some(w) = phrase_file::permissions_warning(phrase_file::Platform::current(), mode, &path)
+    {
+        let _ = writeln!(stderr, "{w}");
+    }
+    Ok(SavedPhrase {
+        path: path.display().to_string(),
+        already_saved,
+        index,
+    })
+}
+
 /// Map a convert output NodeType to its advisory class.
 /// Returns None for side-input-only nodes (Path, Fingerprint) that are
 /// never "output" artifacts in the watch-only/private sense.
@@ -1321,11 +1526,14 @@ type Output = (NodeType, String);
 // 4th element (C6): the SLIP-0132 variant the source mk1 card's path conventionally
 // implies, when `--to xpub` was requested and the path is non-neutral. `run()`
 // renders it as a stderr hint (stdout stays the neutral xpub).
+// 5th element: the wordlist a `phrase` output is written in (the ms1 Mnem
+// card's wire language wins over `--language`), for `--phrase-out-dir`.
 type ComputeOutputsResult = (
     Vec<Output>,
     Option<&'static str>,
     Option<SeedVersion>,
     Option<crate::slip0132::XpubPrefix>,
+    Option<bip39::Language>,
 );
 
 fn compute_outputs(
@@ -1357,12 +1565,17 @@ fn compute_outputs(
                     })?;
                     let m = Mnemonic::parse_in(language.into(), &phrase)
                         .map_err(ToolkitError::Bip39)?;
-                    zeroize::Zeroizing::new(m.to_entropy())
+                    // F-579: not `m.to_entropy()`, which re-detects the
+                    // language and panics on an English/French-ambiguous phrase.
+                    crate::derive_slot::entropy_in_language(&m, language.into())
                 }
                 Phrase => {
+                    // SAFETY: third-party-blocked — `bip39::Mnemonic` has no
+                    // Drop+Zeroize; FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`.
                     let m =
                         Mnemonic::parse_in(language.into(), value).map_err(ToolkitError::Bip39)?;
-                    zeroize::Zeroizing::new(m.to_entropy())
+                    // F-579 (see the seedqr arm).
+                    crate::derive_slot::entropy_in_language(&m, language.into())
                 }
                 _ => zeroize::Zeroizing::new(hex::decode(value).map_err(|e| {
                     ToolkitError::BadInput(format!("--from entropy hex-decode: {e}"))
@@ -1574,7 +1787,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None, None))
+            Ok((out, None, None, None, Some(language.into())))
         }
         Xprv => {
             let xprv = bip32::Xpriv::from_str(value)
@@ -1594,7 +1807,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None, None))
+            Ok((out, None, None, None, None))
         }
         Xpub => {
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
@@ -1649,7 +1862,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, input_variant, None, None))
+            Ok((out, input_variant, None, None, None))
         }
         Wif => {
             let pk = PrivateKey::from_wif(value)
@@ -1696,7 +1909,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None, None))
+            Ok((out, None, None, None, None))
         }
         Bip38 => {
             // SPEC v0.7 §12 + v0.8 §12.b — decrypt to raw key + compress flag,
@@ -1729,7 +1942,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None, None))
+            Ok((out, None, None, None, None))
         }
         Ms1 => {
             // mstring display-grouping (SPEC §3.2): strip separators (ms1 is
@@ -1783,7 +1996,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None, None))
+            Ok((out, None, None, None, Some(payload_lang)))
         }
         Mk1 => {
             // mstring display-grouping (SPEC §3.2): mk1 multi-chunk input is
@@ -1826,7 +2039,7 @@ fn compute_outputs(
             } else {
                 None
             };
-            Ok((out, None, None, path_hint))
+            Ok((out, None, None, path_hint, None))
         }
         Fingerprint | Path => Err(ToolkitError::BadInput(format!(
             "--from {} is not a primary value-bearing node",
@@ -1867,7 +2080,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, None, None))
+            Ok((out, None, None, None, None))
         }
         ElectrumPhrase => {
             // SPEC v0.7 §14 + v0.8 §14 — validate via HMAC-SHA512 prefix;
@@ -1888,7 +2101,7 @@ fn compute_outputs(
                 };
                 out.push((t, v));
             }
-            Ok((out, None, detected_version, None))
+            Ok((out, None, detected_version, None, None))
         }
         Address => unreachable!("classify_edge intercepts (Address, *) as one-way"),
     }

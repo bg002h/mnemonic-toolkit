@@ -302,6 +302,13 @@ pub enum ToolkitError {
     /// A nostr key (`npub`/`nsec` NIP-19 bech32 or 64-hex) failed to decode or
     /// validate (bad bech32/HRP/length, not-on-curve x-only, out-of-range scalar).
     NostrKeyParse(String),
+    /// `convert --phrase-out-dir`: an entry is already at the file's name and
+    /// it is not the same bytes (a different file, a symlink, a FIFO, a
+    /// directory, an oversized file). Nothing is written. Exit 1.
+    PhraseFileExists {
+        path: String,
+        reason: String,
+    },
     /// v0.75.0 `mnemonic inspect <md1>` — the canonical
     /// `md_codec::descriptor_to_template` renderer (relocated into md-codec
     /// 0.40.0) refused to render the keyless `@N` wallet-policy template for a
@@ -686,6 +693,7 @@ impl ToolkitError {
             ToolkitError::MultisigConfig { .. } => 1,
             ToolkitError::NetworkMismatch { .. } => 2,
             ToolkitError::NostrKeyParse(_) => 1,
+            ToolkitError::PhraseFileExists { .. } => 1,
             ToolkitError::Render(_) => 2,
             ToolkitError::Repair(_) => 2,
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
@@ -758,6 +766,7 @@ impl ToolkitError {
             ToolkitError::MultisigConfig { .. } => "MultisigConfig",
             ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
             ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
+            ToolkitError::PhraseFileExists { .. } => "PhraseFileExists",
             ToolkitError::Render(_) => "Render",
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
@@ -952,6 +961,10 @@ impl ToolkitError {
                  mainnet vs testnet/signet/regtest only)"
             ),
             ToolkitError::NostrKeyParse(msg) => format!("nostr: {msg}"),
+            ToolkitError::PhraseFileExists { path, reason } => format!(
+                "--phrase-out-dir: {path} already exists and is not these words ({reason}); \
+                 nothing written. Move it aside or choose another directory"
+            ),
             // `RenderError`'s Display already carries a structural-guard message
             // ("malformed descriptor tree: …"); surface it via the source.
             ToolkitError::Render(e) => format!("inspect: template render failed: {e}"),
@@ -1169,6 +1182,14 @@ mod tests {
             }
             .exit_code(),
             3,
+        );
+        assert_eq!(
+            ToolkitError::PhraseFileExists {
+                path: "d/seed.txt".into(),
+                reason: "x".into()
+            }
+            .exit_code(),
+            1,
         );
         assert_eq!(
             ToolkitError::BundleMismatch {
@@ -1509,6 +1530,14 @@ mod tests {
             }
             .kind(),
             "FutureFormat",
+        );
+        assert_eq!(
+            ToolkitError::PhraseFileExists {
+                path: "".into(),
+                reason: "".into()
+            }
+            .kind(),
+            "PhraseFileExists",
         );
     }
 }
