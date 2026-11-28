@@ -260,6 +260,158 @@ pub struct RestoreArgs {
     /// still go to stderr.
     #[arg(long, default_value = "-")]
     pub output: String,
+
+    /// Go on when an origin path's coin type (0h or 1h) disagrees with its key or the network; the output is for the run's network, every path is kept as written, and a warning is printed each time.
+    #[arg(long = "accept-coin-type-mismatch")]
+    pub accept_coin_type_mismatch: bool,
+}
+
+/// The network rule for a restore run: refuse (exit 8) or print its warnings.
+fn network_check<E: Write>(
+    args: &RestoreArgs,
+    sources: Vec<crate::network_rule::Source>,
+    seed_only: bool,
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let mut input = crate::network_rule::Input::new(
+        crate::network_rule::RunNet::from_opt(args.network),
+        sources,
+        crate::network_rule::Thing::Card,
+    );
+    input.seed_only = seed_only;
+    input.accept_coin_type = args.accept_coin_type_mismatch;
+    crate::network_rule::enforce(&input, stderr)
+}
+
+/// One `--cosigner @N=` value set, decoded: its 65-byte key and its source.
+struct ParsedCosigner {
+    key65: [u8; 65],
+    source: crate::network_rule::KeySource,
+}
+
+/// Group and decode every `--cosigner @N=<mk1|xpub>` (keyed md1). Each key's
+/// coins are `extra(N)` (the md1 slot's coin) followed by an mk1's own coin.
+fn parse_positioned_cosigners(
+    specs: &[String],
+    extra: impl Fn(u8) -> Vec<crate::network_rule::KeyCoin>,
+) -> Result<std::collections::BTreeMap<u8, ParsedCosigner>, ToolkitError> {
+    use crate::network_rule::{mk1_key_source, KeySource, Who};
+    let mut by_pos: std::collections::BTreeMap<u8, Vec<String>> = std::collections::BTreeMap::new();
+    for spec in specs {
+        let (lhs, rhs) = spec
+            .split_once('=')
+            .ok_or_else(|| bad(format!("--cosigner expects @N=<mk1|xpub>, got `{spec}`")))?;
+        let n: u8 = lhs
+            .trim_start_matches('@')
+            .parse()
+            .map_err(|_| bad(format!("--cosigner position `{lhs}` is not `@N`")))?;
+        by_pos.entry(n).or_default().push(rhs.to_string());
+    }
+    let mut out = std::collections::BTreeMap::new();
+    for (n, values) in &by_pos {
+        let n = *n;
+        // mk1 (multi-chunk) vs a single raw xpub. Case-insensitive PROBE
+        // (v0.53.3 audit M11); originals pass to mk-codec, the case
+        // authority (it lowercase-normalizes; rejects mixed).
+        let parsed = if values.iter().all(|v| v.to_lowercase().starts_with("mk1")) {
+            let refs: Vec<&str> = values.iter().map(|v| v.as_str()).collect();
+            let kc = mk_codec::decode(&refs)
+                .map_err(|e| bad(format!("--cosigner @{n} mk1 decode: {e}")))?;
+            let mut source = mk1_key_source(Who::cosigner(n as usize, "mk1 card"), &kc);
+            let mut coins = extra(n);
+            coins.append(&mut source.coins);
+            source.coins = coins;
+            ParsedCosigner {
+                key65: crate::synthesize::xpub_to_65(&kc.xpub),
+                source,
+            }
+        } else if values.len() == 1 {
+            let xpub = Xpub::from_str(&values[0])
+                .map_err(|e| bad(format!("--cosigner @{n} xpub parse: {e}")))?;
+            let source = KeySource {
+                who: Who::cosigner(n as usize, "xpub"),
+                pfx: values[0].chars().take(4).collect(),
+                class: crate::network_rule::Class::of_kind(xpub.network),
+                coins: extra(n),
+            };
+            ParsedCosigner {
+                key65: crate::synthesize::xpub_to_65(&xpub),
+                source,
+            }
+        } else {
+            return Err(bad(format!(
+                "--cosigner @{n}: multiple values must all be mk1 chunks, or a single xpub"
+            )));
+        };
+        out.insert(n, parsed);
+    }
+    Ok(out)
+}
+
+/// The keys of a template completion's `--cosigner` values, best effort (the
+/// completion engine reports a value that does not decode): `@N=` values as
+/// `--cosigner @N's mk1 card` / `xpub`, unassigned ones in the order given as
+/// `--cosigner mk1 card @i` / `--cosigner xpub @i`.
+fn template_cosigner_sources(specs: &[String]) -> Vec<crate::network_rule::Source> {
+    use crate::network_rule::{mk1_key_source, KeySource, Source, Who};
+    let xpub_source = |who: Who, text: &str| {
+        Xpub::from_str(text).ok().map(|x| KeySource {
+            who,
+            pfx: text.chars().take(4).collect(),
+            class: crate::network_rule::Class::of_kind(x.network),
+            coins: vec![],
+        })
+    };
+    let mut assigned: std::collections::BTreeMap<u8, Vec<&str>> = std::collections::BTreeMap::new();
+    let mut unassigned: Vec<&str> = Vec::new();
+    for spec in specs {
+        if spec.starts_with('@') {
+            if let Some((lhs, rhs)) = spec.split_once('=') {
+                if let Ok(n) = lhs.trim_start_matches('@').parse::<u8>() {
+                    assigned.entry(n).or_default().push(rhs);
+                }
+            }
+        } else {
+            unassigned.push(spec);
+        }
+    }
+    let mut out = Vec::new();
+    for (n, chunks) in &assigned {
+        let n = *n as usize;
+        let key = if chunks
+            .first()
+            .is_some_and(|c| c.to_lowercase().starts_with("mk1"))
+        {
+            mk_codec::decode(chunks)
+                .ok()
+                .map(|kc| mk1_key_source(Who::cosigner(n, "mk1 card"), &kc))
+        } else if chunks.len() == 1 {
+            xpub_source(Who::cosigner(n, "xpub"), chunks[0])
+        } else {
+            None
+        };
+        out.extend(key.map(Source::Key));
+    }
+    let (mut cards, mut xpubs) = (0usize, 0usize);
+    let mut buf: Vec<&str> = Vec::new();
+    for chunk in unassigned {
+        if !chunk.to_lowercase().starts_with("mk1") {
+            out.extend(xpub_source(Who::stem("--cosigner xpub", xpubs), chunk).map(Source::Key));
+            xpubs += 1;
+            buf.clear();
+            continue;
+        }
+        buf.push(chunk);
+        if let Ok(kc) = mk_codec::decode(&buf) {
+            out.push(Source::Key(mk1_key_source(
+                Who::stem("--cosigner mk1 card", cards),
+                &kc,
+            )));
+            cards += 1;
+            buf.clear();
+        }
+    }
+    out
 }
 
 fn bad(s: impl Into<String>) -> ToolkitError {
@@ -1549,6 +1701,16 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     // (The `--own-account-max` I-1 gate now lives in the SHARED
     // `complete_multisig_template` core, so both restore + verify-bundle refuse
     // it uniformly.)
+
+    // The network rule (Spec B unit 2): each `--cosigner` key against the run
+    // and its own origin coin; the template itself names no network and the
+    // seed is typed now (N6), so nothing else is a source.
+    network_check(
+        args,
+        template_cosigner_sources(&args.cosigner),
+        true,
+        stderr,
+    )?;
 
     // --- Floor 1(i): `--from` is REQUIRED + resolve the seed entropy ----------
     // Factored into the SHARED helper so verify-bundle's multisig-template path
@@ -4055,6 +4217,37 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         });
     }
 
+    // The network rule (Spec B unit 2, R2.1-R2.9): a slot with a `--cosigner`
+    // card is that card's key, carrying the md1 slot's coin and the card's own;
+    // a slot with none is its md1 coin alone (run form). A `--from` seed does
+    // not exempt the md1 (R2.9).
+    let slot_coin = |n: u8| -> Vec<crate::network_rule::KeyCoin> {
+        cosigners
+            .iter()
+            .find(|c| c.idx == n)
+            .and_then(|c| {
+                crate::network_rule::key_coin(
+                    crate::network_rule::PathWho::Named(crate::network_rule::Who::key(n as usize)),
+                    &c.origin,
+                )
+            })
+            .into_iter()
+            .collect()
+    };
+    let parsed_cosigners = parse_positioned_cosigners(&args.cosigner, slot_coin)?;
+    {
+        use crate::network_rule::Source;
+        let mut sources: Vec<Source> = Vec::new();
+        for c in &cosigners {
+            match parsed_cosigners.get(&c.idx) {
+                Some(p) => sources.push(Source::Key(p.source.clone())),
+                None => sources.extend(slot_coin(c.idx).into_iter().map(Source::Coin)),
+            }
+        }
+        // A `--cosigner` position the wallet does not have is refused below.
+        network_check(args, sources, false, stderr)?;
+    }
+
     // Plain arm: existing `build_descriptor_string` (byte-for-byte unchanged —
     // `tap_internal_key` is `Some(ik)` for taproot, `None` for non-taproot,
     // exactly as before). General arm: the faithful reconstruction.
@@ -4234,44 +4427,15 @@ fn run_multisig<R: Read, W: Write, E: Write>(
 
     // 6b. explicit cosigner assertions (--cosigner @N=mk1|xpub).
     if mismatch.is_none() && !args.cosigner.is_empty() {
-        // Group values by position N.
-        let mut by_pos: std::collections::BTreeMap<u8, Vec<String>> =
-            std::collections::BTreeMap::new();
-        for spec in &args.cosigner {
-            let (lhs, rhs) = spec
-                .split_once('=')
-                .ok_or_else(|| bad(format!("--cosigner expects @N=<mk1|xpub>, got `{spec}`")))?;
-            let n: u8 = lhs
-                .trim_start_matches('@')
-                .parse()
-                .map_err(|_| bad(format!("--cosigner position `{lhs}` is not `@N`")))?;
-            by_pos.entry(n).or_default().push(rhs.to_string());
-        }
-        for (n, values) in &by_pos {
+        // Values grouped by position N and decoded before the network rule.
+        for (n, p) in &parsed_cosigners {
             let c = cosigners.iter().find(|c| c.idx == *n).ok_or_else(|| {
                 bad(format!(
                     "--cosigner @{n}: position out of range (wallet has {} cosigners)",
                     cosigners.len()
                 ))
             })?;
-            // mk1 (multi-chunk) vs a single raw xpub. Case-insensitive PROBE
-            // (v0.53.3 audit M11); originals pass to mk-codec, the case
-            // authority (it lowercase-normalizes; rejects mixed).
-            let supplied65: [u8; 65] = if values.iter().all(|v| v.to_lowercase().starts_with("mk1"))
-            {
-                let refs: Vec<&str> = values.iter().map(|v| v.as_str()).collect();
-                let kc = mk_codec::decode(&refs)
-                    .map_err(|e| bad(format!("--cosigner @{n} mk1 decode: {e}")))?;
-                crate::synthesize::xpub_to_65(&kc.xpub)
-            } else if values.len() == 1 {
-                let xpub = Xpub::from_str(&values[0])
-                    .map_err(|e| bad(format!("--cosigner @{n} xpub parse: {e}")))?;
-                crate::synthesize::xpub_to_65(&xpub)
-            } else {
-                return Err(bad(format!(
-                    "--cosigner @{n}: multiple values must all be mk1 chunks, or a single xpub"
-                )));
-            };
+            let supplied65 = p.key65;
             if supplied65 != c.key65 {
                 mismatch = Some((
                     "cosigner-key",

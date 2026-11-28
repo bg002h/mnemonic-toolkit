@@ -237,7 +237,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             .map_err(ToolkitError::Io)?;
             return Ok(0);
         }
-        emit(&validated, args, stdout, stderr)?;
+        emit(&validated, args, stdout)?;
         return Ok(0);
     }
 
@@ -256,7 +256,7 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     emit_allow_notes(&args.allow, &validated.allowed_fired, stderr)?;
     network_check(&validated, &spec_text, args, stderr)?;
-    emit(&validated, args, stdout, stderr)?;
+    emit(&validated, args, stdout)?;
     Ok(0)
 }
 
@@ -345,11 +345,10 @@ fn emit_diagnostics<W: Write, E: Write>(
     Ok(())
 }
 
-fn emit<W: Write, E: Write>(
+fn emit<W: Write>(
     vp: &ValidatedPolicy,
     args: &BuildDescriptorArgs,
     stdout: &mut W,
-    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     // Canonical descriptor (with BIP-380 checksum) via the round-trip idiom.
     let canonical = vp.descriptor.to_string();
@@ -417,17 +416,16 @@ fn emit<W: Write, E: Write>(
             )
             .map_err(ToolkitError::Io)?;
         }
-        None => emit_human(vp, args, &canonical, stdout, stderr)?,
+        None => emit_human(vp, args, &canonical, stdout)?,
     }
     Ok(())
 }
 
-fn emit_human<W: Write, E: Write>(
+fn emit_human<W: Write>(
     vp: &ValidatedPolicy,
     args: &BuildDescriptorArgs,
     canonical: &str,
     stdout: &mut W,
-    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     // The network rule has checked the keys against the run (Spec A unit 7,
     // erratum E1): the preview network is the run network.

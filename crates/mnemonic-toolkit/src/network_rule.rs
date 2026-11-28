@@ -1796,6 +1796,20 @@ mod tests {
     }
 }
 
+/// An mk1 card as a key: its version class, the decoded xpub's prefix, and
+/// the card's own origin coin as `KeyCoin{OwnKey}` (B1).
+pub fn mk1_key_source(who: Who, card: &mk_codec::KeyCard) -> KeySource {
+    let text = card.xpub.to_string();
+    KeySource {
+        who,
+        pfx: text.chars().take(4).collect(),
+        class: Class::of_kind(card.xpub.network),
+        coins: key_coin(PathWho::OwnKey, &card.origin_path)
+            .into_iter()
+            .collect(),
+    }
+}
+
 /// The sources of `--slot @N.<subkey>=` inputs (export-wallet, bundle), in
 /// slot order: `@N.xpub` and `@N.master_xpub` are keys (prefix as typed), a
 /// typed `@N.path` is a coin on the slot's xpub (key form) or, for a seed
