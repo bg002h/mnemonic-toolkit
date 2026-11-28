@@ -383,7 +383,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--json` | emit JSON output |
 | `--no-engraving-card` | suppress the stderr engraving-card layout |
 | `--group-size <N>` | mstring display grouping: insert a separator every N characters in the emitted `ms1`/`mk1`/`md1` card strings; `0` = unbroken (**default 0** — pass `5` for the engraving-friendly five-character groups). Display only — `--json` and `verify-bundle` forensic strings always stay unbroken. The same flag (with `--separator`) is also accepted on `convert` (when emitting an `ms1`/`mk1` card) and on `ms-shares split` / `ms-shares combine --to ms1`. |
-| `--separator <space>` | the grouping separator for `--group-size` (default `space`); accepts the keyword `space` or the literal `" "`. **Whitespace only**: `hyphen` and `comma` were retired, because `mt`'s decoder strips whitespace and nothing else, so a hyphen-grouped card round-trips here and is refused there. Intake still strips `-` and `,`, so cards grouped by an older build still decode. |
+| `--separator <space>` | the grouping separator for `--group-size` (default `space`); accepts the keyword `space` or the literal `" "`. **Whitespace only**: `hyphen` and `comma` were retired, because [`mt`](#mt-mt-cli-reference)'s decoder strips whitespace and nothing else, so a hyphen-grouped card round-trips here and is refused there. Intake still strips `-` and `,`, so cards grouped by an older build still decode. |
 | `--multisig-path-family <FAMILY>` | bip48 or bip87 (default bip87) |
 | `--privacy-preserving` | suppress the master fingerprint from mk1 + engraving card |
 | `--self-check` | re-parse and verify the emitted bundle round-trips |

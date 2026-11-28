@@ -100,3 +100,17 @@ mr root
 mr child
 mr lost-or-stolen
 mr procedure
+
+# mt (mnemonic-transaction) -- checked only when MT_BIN is set (tests/lint.sh).
+mt encode
+mt decode
+mt verify
+mt inspect
+
+# me (mnemonic-engrave) -- checked only when ME_BIN is set (tests/lint.sh).
+me bundle
+me sysw pack
+me sysw wipe
+me sysw show
+me seal
+me hash
