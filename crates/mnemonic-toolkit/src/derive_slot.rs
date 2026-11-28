@@ -692,6 +692,16 @@ mod phrase_out_dir_tests {
     }
 
     #[test]
+    fn entropy_in_language_round_trips_every_language_at_24_words() {
+        // Public BIP-39 vector entropy 0x7f..7f (32 bytes) in every wordlist.
+        let ent = [0x7fu8; 32];
+        for lang in Bip39Language::ALL.iter().copied() {
+            let m = Mnemonic::from_entropy_in(lang, &ent).unwrap();
+            assert_eq!(*entropy_in_language(&m, lang), ent.to_vec(), "{lang:?}");
+        }
+    }
+
+    #[test]
     fn master_fingerprint_of_words_is_template_and_network_free() {
         let fp = master_fingerprint_of_words(PHRASE12, Bip39Language::English, "").unwrap();
         assert_eq!(fp, "73c5da0a");

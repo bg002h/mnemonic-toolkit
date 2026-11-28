@@ -364,8 +364,10 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub json: bool,
 
-    /// Write the `phrase` output to a NEW owner-only (0600) file in DIR
-    /// instead of stdout, named `seed-<local date>-<fingerprint>[-<language>].txt`.
+    /// Write the `phrase` output to a NEW owner-only (0600 on Unix; Windows
+    /// and some mounts cannot restrict it, and say so) file in DIR instead of
+    /// stdout, named `seed-<local date>-<fingerprint>[-<passphrase
+    /// fingerprint>][-<language>].txt`.
     /// Needs `--to phrase`. DIR must already exist and is never created; a
     /// symlink to a directory is followed. The file holds the bare words and
     /// one newline (`bundle --slot @0.phrase=- < FILE` and `ms encode --in
@@ -1456,7 +1458,7 @@ fn save_phrase_file<E: Write>(
     let outcome = phrase_file::write_new(dir, &name, &bytes, phrase_file::Faults::default())?;
     let path = dir.join(&name);
     let (already_saved, mode) = match outcome {
-        phrase_file::Outcome::Written { mode } => {
+        phrase_file::Outcome::Written { mode, leftover } => {
             let _ = match &fp_pass {
                 None => writeln!(
                     stderr,
@@ -1469,6 +1471,13 @@ fn save_phrase_file<E: Write>(
                     path.display()
                 ),
             };
+            if let Some(t) = leftover {
+                let _ = writeln!(
+                    stderr,
+                    "warning: could not remove the temporary copy {}; delete it (it holds the words)",
+                    t.display()
+                );
+            }
             (false, mode)
         }
         phrase_file::Outcome::AlreadySaved { mode } => {

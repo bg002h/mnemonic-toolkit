@@ -203,9 +203,16 @@ pub(crate) fn dir_writable_warning(dir: &Path) -> Option<String> {
     {
         use std::os::unix::fs::PermissionsExt;
         let md = fs::metadata(dir).ok()?;
-        if md.permissions().mode() & 0o022 != 0 {
+        let m = md.permissions().mode();
+        if m & 0o022 != 0 {
+            // Sticky (like /tmp): others cannot delete or rename our file.
+            let what = if m & 0o1000 != 0 {
+                "they could plant names in it"
+            } else {
+                "they could delete the saved file or plant names in it"
+            };
             return Some(format!(
-                "warning: {} is writable by other users; they could delete the saved file or plant names in it",
+                "warning: {} is writable by other users; {what}",
                 dir.display()
             ));
         }
@@ -290,8 +297,13 @@ pub(crate) struct Faults {
 /// What happened at the name.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Outcome {
-    /// A new file was written; its mode from `fstat` (Unix).
-    Written { mode: Option<u32> },
+    /// A new file was written; its mode from `fstat` (Unix). `leftover` is
+    /// the temporary copy when the file was saved but unlinking the temporary
+    /// copy failed (the caller tells the user to delete it).
+    Written {
+        mode: Option<u32>,
+        leftover: Option<PathBuf>,
+    },
     /// The same bytes were already there, untouched.
     AlreadySaved { mode: Option<u32> },
 }
@@ -368,7 +380,8 @@ pub(crate) fn check_existing(path: &Path, bytes: &[u8]) -> Result<Option<Outcome
     let md = match fs::symlink_metadata(path) {
         Ok(m) => m,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(exists(path, format!("cannot examine it: {e}"))),
+        // Not knowing is not "it exists" (spec §2.5: other I/O failures are Io).
+        Err(e) => return Err(io_err(path, "cannot examine the file name", e)),
     };
     let ft = md.file_type();
     if ft.is_symlink() {
@@ -464,6 +477,11 @@ pub(crate) fn write_new(
         return Err(io_err(dir, "cannot write the temporary file", e));
     }
     let mode = handle_mode(&tf);
+    #[cfg(unix)]
+    let ours = {
+        use std::os::unix::fs::MetadataExt;
+        tf.metadata().ok().map(|m| (m.dev(), m.ino()))
+    };
     drop(tf);
 
     // Step 2.
@@ -479,8 +497,12 @@ pub(crate) fn write_new(
     // Step 3: unlink T on every outcome of step 2.
     let unlinked = fs::remove_file(&t);
     fsync_dir(dir);
+    let mut leftover = None;
     if let Err(e) = unlinked {
-        if e.kind() != io::ErrorKind::NotFound {
+        if e.kind() != io::ErrorKind::NotFound && linked.is_ok() {
+            // The seed IS saved; only the temporary copy remains.
+            leftover = Some(t.clone());
+        } else if e.kind() != io::ErrorKind::NotFound {
             // Only reachable when unlink itself fails; say where the copy is.
             return Err(io_err(
                 dir,
@@ -494,7 +516,25 @@ pub(crate) fn write_new(
     }
 
     match linked {
-        Ok(()) => return Ok(Outcome::Written { mode }),
+        Ok(()) => {
+            // In a directory others can write to, T could have been swapped
+            // between create and link: the name must be OUR inode.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                let now = fs::symlink_metadata(&n).ok().map(|m| (m.dev(), m.ino()));
+                if ours.is_none() || now != ours {
+                    let _ = fs::remove_file(&n);
+                    fsync_dir(dir);
+                    return Err(io_err(
+                        dir,
+                        "the temporary file was replaced during the write (another user can write to this directory); nothing was saved",
+                        io::Error::other("inode mismatch"),
+                    ));
+                }
+            }
+            return Ok(Outcome::Written { mode, leftover });
+        }
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
             // A racer won: examine what is there.
             return match check_existing(&n, bytes)? {
@@ -530,7 +570,10 @@ pub(crate) fn write_new(
     let mode = handle_mode(&nf);
     drop(nf);
     fsync_dir(dir);
-    Ok(Outcome::Written { mode })
+    Ok(Outcome::Written {
+        mode,
+        leftover: None,
+    })
 }
 
 /// Validate `--phrase-out-dir <DIR>` (spec §2.5).
@@ -562,6 +605,23 @@ mod tests {
     use super::*;
 
     const WORDS: &[u8] = b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about\n";
+
+    #[cfg(unix)]
+    #[test]
+    fn dir_writable_warning_respects_the_sticky_bit() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tempfile::tempdir().unwrap();
+        fs::set_permissions(d.path(), fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(dir_writable_warning(d.path()).is_none());
+        fs::set_permissions(d.path(), fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(dir_writable_warning(d.path())
+            .unwrap()
+            .contains("could delete"));
+        fs::set_permissions(d.path(), fs::Permissions::from_mode(0o1777)).unwrap();
+        let w = dir_writable_warning(d.path()).unwrap();
+        assert!(w.contains("plant names") && !w.contains("delete"), "{w}");
+        fs::set_permissions(d.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    }
 
     fn entries(dir: &Path) -> Vec<String> {
         let mut v: Vec<String> = fs::read_dir(dir)
