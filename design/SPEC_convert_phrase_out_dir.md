@@ -1,6 +1,6 @@
 # SPEC — `mnemonic convert --phrase-out-dir`: save seed words to an owner-only file
 
-Status: DRAFT for Brian's review (2026-11-28). Not implemented. No R0 yet.
+Status: DRAFT; Brian's rulings of 2026-11-28 folded (§3, §6). Not implemented. R0 pending.
 Baseline: mnemonic-toolkit `master` at `d72a18b`.
 
 ## 1. Why
@@ -36,6 +36,7 @@ mnemonic convert --from <node>=<value|-> --to phrase [--to …] --phrase-out-dir
 
 | flag | meaning |
 |---|---|
+| `--name-with-passphrase-fp` | Requires `--phrase-out-dir` and a non-empty passphrase (refused otherwise). Adds the passphrase-applied fingerprint to the file name (§3). Its help says it gives anyone holding the file an offline passphrase checker (§6 C2). |
 | `--phrase-out-dir <DIR>` | Write the `phrase` output to a new owner-only file in `DIR` instead of stdout, named by §3. Requires `phrase` among the `--to` targets; refused otherwise. `DIR` must already exist (it is never created). |
 
 Behaviour:
@@ -56,14 +57,20 @@ Behaviour:
 seed-<YYYY-MM-DD>-<fp>[-<fp-pass>][-<language>].txt
 ```
 
-- `<YYYY-MM-DD>`: today's date, **UTC** (see §6, concern C3).
+- `<YYYY-MM-DD>`: today's date in the machine's **local time zone** (Brian,
+  2026-11-28: *"use local time when available"*). If the local offset cannot be
+  determined, the date is UTC and stderr says `note: local time zone unavailable;
+  file date is UTC`. The crate that reads the offset is the build plan's choice;
+  it must not be unsound in a multithreaded process (the `time` crate's
+  `local-offset` refuses there on Unix, so it would always fall back).
 - `<fp>`: the BIP-32 **master fingerprint** of the phrase **with an empty
   passphrase**, 8 lowercase hex characters, the same value `--to fingerprint`
   prints. This is "the hash of the words" (see §6, concern C1 for why not a
   plain SHA-256).
 - `-<fp-pass>` (Brian, 2026-11-28: *"if user supplies passphrase use xfp for
-  both raw seed and with passphrase applied in filename"*): present only when
-  the user supplies a non-empty BIP-39 passphrase through `convert`'s existing
+  both raw seed and with passphrase applied in filename"*, then *"Behind a
+  flag"*): present only when the user passes `--name-with-passphrase-fp` AND
+  supplies a non-empty BIP-39 passphrase through `convert`'s existing
   `--passphrase` / `--passphrase-stdin` / `@env:VAR` channels. It is the master
   fingerprint with that passphrase applied, 8 lowercase hex. Raw seed first,
   passphrase second. The passphrase itself is never written to the file or the
@@ -95,7 +102,7 @@ Date first so a directory listing sorts by date.
   the contents: a racing writer of the same name writes the same bytes.
 - Non-Unix (Windows): no mode bits exist. The file is written and stderr says
   `warning: file permissions not restricted on this platform; protect <path>`.
-  (Alternative for Brian: refuse on Windows. See §6, C5.)
+  (Ruled, §6 C5.)
 
 ## 5. Examples
 
@@ -153,21 +160,17 @@ found exactly. (An xpub or descriptor stored next to the file already gives the
 same check, and a used wallet's addresses give a slower one.) Options: (a) as
 ruled; (b) keep the second fingerprint off by default and add it with
 `--name-with-passphrase-fp`; (c) print it on stderr only. Recommended: (b), but
-the spec follows the ruling (a) until Brian says otherwise.
+RULED (b), "Behind a flag": `--name-with-passphrase-fp`.
 
-**C3. Which date.** UTC, because the toolkit has no time-zone dependency and the
-result must not depend on the machine's TZ. Near midnight the date can be "wrong"
-by a day for the user. The date also records roughly when the user handled the
-seed, which is metadata some users would not want. Alternative: local date
-(adds a dependency), or a `--no-date` switch.
+**C3. RULED 2026-11-28: local date when available, else UTC with a note.**
+The date still records roughly when the user handled the seed, which is metadata.
 
 **C4. A 0600 file is still a plaintext seed on disk.** It survives in backups,
 swap-free copies, and filesystem journals, and is readable by root and by any
 process running as the user. The help text says so and points at `ms encode` /
 engraving as the durable form. Encryption (`age`) is out of scope here.
 
-**C5. Windows.** No `0600`. The spec writes with a warning; refusing is the
-stricter choice.
+**C5. RULED 2026-11-28: Windows writes with a warning, not a refusal.**
 
 ## 7. Lockstep (owed by the build PR)
 
@@ -182,6 +185,10 @@ stricter choice.
 - name: `seed-<date>-<fp>.txt` for the all-zero test entropy, with the date
   injected through a test-only seam (no wall clock in tests);
 - non-English name suffix; English has none;
+- passphrase given without `--name-with-passphrase-fp` → one fingerprint (the
+  raw seed's); with it → both, raw first; the flag without a passphrase, or
+  without `--phrase-out-dir`, refused; the passphrase never appears in the file;
+- local-offset unavailable → UTC date and the stderr note;
 - contents: bare words + one `\n`; round-trips through `bundle --slot @0.phrase=-`
   and `ms encode --in`;
 - mode `0o600` regardless of a permissive umask (`umask 022`);
