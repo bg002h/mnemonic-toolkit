@@ -777,6 +777,7 @@ dependencies = [
  "tempfile",
  "unicode-normalization",
  "wc-codec",
+ "windows-sys",
  "zeroize",
 ]
 

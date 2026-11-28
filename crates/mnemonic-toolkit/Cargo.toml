@@ -134,6 +134,12 @@ similar = "2"
 unicode-normalization = "0.1"
 zeroize = { version = "1.8", features = ["derive"] }
 
+# `convert --phrase-out-dir` names its file with the LOCAL date; on Windows that
+# is `GetLocalTime` (Unix uses `libc::localtime_r`). 0.61.2 is already locked and
+# vendored (a transitive dependency); this only adds the direct edge.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_SystemInformation"] }
+
 [features]
 # Test-only: lets slip39 split read MNEMONIC_SLIP39_TEST_RNG /
 # _IDENTIFIER for deterministic shares. Off in every shipped build; there a set variable is refused.

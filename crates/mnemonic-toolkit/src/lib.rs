@@ -239,6 +239,7 @@ pub mod parse_descriptor;
 #[cfg(not(fuzzing))]
 mod parse_descriptor;
 mod passphrase_input;
+mod phrase_file;
 #[cfg(fuzzing)]
 pub mod repair;
 #[cfg(not(fuzzing))]
