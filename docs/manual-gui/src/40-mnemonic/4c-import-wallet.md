@@ -303,16 +303,12 @@ Boolean toggle (it routes the GUI's stdin to the subprocess).
 
 ## `--network` {#mnemonic-import-wallet-network}
 
-(v0.34.6) Re-bind the imported network to disambiguate **signet** /
-**regtest** from the coin-type-1→testnet collapse (BIP-129 BSMS +
-Bitcoin Core `listdescriptors` use coin-type `1` for testnet / signet
-/ regtest alike). Honored ONLY within the parsed coin-type class
-(testnet ↔ {testnet, signet, regtest}; mainnet ↔ mainnet) — a
-cross-class request (e.g. `--network mainnet` on a testnet-coin-type
-blob) is refused (exit 1, `ImportWalletNetworkClassMismatch`) because
-the blob's xpub prefix is coin-type-bound. Absent = use the
-coin-type-derived network. The GUI renders this flag as a Dropdown with
-a `?` help-icon.
+The network of the imported wallet. Absent = mainnet: nothing is
+inferred from the blob. Every key of the blob (and a Coldcard file's
+stated `chain`) must be of this network, so a testnet, signet or
+regtest export is imported with that network picked; a contradiction is
+refused (exit 8, nothing written). The GUI renders this flag as a
+Dropdown with a `?` help-icon.
 
 ### Outline {#mnemonic-import-wallet-network-outline}
 
@@ -323,23 +319,20 @@ a `?` help-icon.
 
 ### `mainnet` {#mnemonic-import-wallet-network-mainnet}
 
-Re-bind to mainnet. Only valid on a mainnet-coin-type blob (a
-cross-class request from a testnet-coin-type blob is refused).
+Mainnet, the default. A blob of test-network keys is refused.
 
 ### `testnet` {#mnemonic-import-wallet-network-testnet}
 
-The default for a coin-type-1 blob. See
+A testnet blob (test-network keys). See
 [`mnemonic bundle --network testnet`](#mnemonic-bundle-network-testnet).
 
 ### `signet` {#mnemonic-import-wallet-network-signet}
 
-Re-bind a coin-type-1 blob to signet. Signet shares testnet's address
-params (`tb1…`), so this changes only the network label.
+A signet blob. Signet shares testnet's address params (`tb1…`).
 
 ### `regtest` {#mnemonic-import-wallet-network-regtest}
 
-Re-bind a coin-type-1 blob to regtest; this changes the HRP to
-`bcrt1…`.
+A regtest blob; addresses use the `bcrt1…` HRP.
 
 ## `--no-auto-repair` {#iw-no-auto-repair}
 

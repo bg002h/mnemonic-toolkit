@@ -293,8 +293,8 @@ disambiguates which SegWit / Taproot derivation path applies).
 ## `--network` {#mnemonic-convert-network}
 
 Same 4 values as [`mnemonic bundle --network`](#mnemonic-bundle-network).
-Optional; defaults vary by `--to` node (mainnet for most;
-inferred from the source for some pivots).
+Optional; default `mainnet` for every `--to` node. A key source
+(xpub, xprv, mk1, WIF) of another network is refused (exit 8).
 
 ### Outline {#mnemonic-convert-network-outline}
 

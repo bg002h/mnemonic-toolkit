@@ -404,12 +404,14 @@ The GUI renders this as a Number widget; no `?` help-icon.
 
 ## `--origin` {#mnemonic-restore-origin}
 
-(#28) Explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for completing a
-**keyless single-sig template** `md1`
-([`bundle --md1-form=template`](#mnemonic-bundle-md1-form-template));
-overrides the template's canonical `m/<purpose>'/<coin>'/<account>'`
-default. Only meaningful for keyless single-sig template restore;
-ignored otherwise. When supplied, `--expect-wallet-id` is NOT checked
+Explicit BIP-32 origin path of the account key (e.g. `m/84'/0'/7'`),
+overriding the template's canonical `m/<purpose>'/<coin>'/<account>'`
+default. Single-sig restore (no `--md1`) derives at it, requires one
+`--template` and refuses a typed `--account`; completing a **keyless
+template** `md1`
+([`bundle --md1-form=template`](#mnemonic-bundle-md1-form-template))
+takes it as the own key's origin. Its coin type (`0h`/`1h`) must agree
+with `--network`. When supplied, `--expect-wallet-id` is NOT checked
 (a different preimage). The GUI renders this as a Text widget.
 
 ## `--expect-wallet-id` {#mnemonic-restore-expect-wallet-id}

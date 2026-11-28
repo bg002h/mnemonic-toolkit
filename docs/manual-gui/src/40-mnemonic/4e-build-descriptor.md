@@ -41,7 +41,7 @@ built from a hand-authored policy.
 - [`--emit-spec`](#mnemonic-build-descriptor-emit-spec) — print the lowered + gate-validated spec JSON instead of building
 - [`--allow`](#mnemonic-build-descriptor-allow) — reviewed opt-out of ONE funds-safety sanity rule per occurrence (repeatable)
 - [`--format`](#mnemonic-build-descriptor-format) — emit a single bare artifact (`descriptor` / `bip388`)
-- [`--network`](#mnemonic-build-descriptor-network) — Bitcoin network (default `mainnet`; human-view rendering only)
+- [`--network`](#mnemonic-build-descriptor-network) — Bitcoin network (default `mainnet`; every key is checked against it)
 - [`--json`](#mnemonic-build-descriptor-json) — emit a structured JSON envelope for the GUI
 
 ## `--spec` {#mnemonic-build-descriptor-spec}
@@ -178,7 +178,8 @@ this as a Text widget.
 
 Boolean. Print the lowered + gate-validated node-tree spec JSON instead
 of building — review it, edit it, feed it back via `--spec`. Conflicts
-with `--format` / `--json`; `--network` is accepted and ignored. The
+with `--format` / `--json`; `--network` is accepted and checked
+against the keys. The
 gate still runs: an invalid preset emits diagnostics, never a spec.
 Records NO allowance in the spec document (replaying without `--allow`
 correctly refuses). The GUI renders this as a Boolean toggle.
@@ -252,9 +253,9 @@ The BIP-388 wallet-policy JSON.
 
 ## `--network` {#mnemonic-build-descriptor-network}
 
-Bitcoin network. Default `mainnet`. Used only for the human-view
-first-receive-address rendering; the descriptor / bip388 / cost output
-is network-agnostic (the xpubs carry the network). Dropdown; same 4
+Bitcoin network. Default `mainnet`. Every key's version and origin
+coin type is checked against it (a contradiction is refused, exit 8),
+and the human-view first receive address is shown for it. Dropdown; same 4
 values as [`bundle --network`](#mnemonic-bundle-network). The GUI
 renders this flag with a `?` help-icon.
 

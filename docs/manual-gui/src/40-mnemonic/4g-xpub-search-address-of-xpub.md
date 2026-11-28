@@ -28,7 +28,7 @@ instead. Read-only search: **no private keys are involved.**
 - [`--gap-limit`](#mnemonic-xpub-search-address-of-xpub-gap-limit) — per-chain scan window (default `20`)
 - [`--external-only`](#mnemonic-xpub-search-address-of-xpub-external-only) — scan the receive chain only (skip change)
 - [`--address-type`](#mnemonic-xpub-search-address-of-xpub-address-type) — explicit child-address script type
-- [`--network`](#mnemonic-xpub-search-address-of-xpub-network) — network selector (default inferred from the xpub)
+- [`--network`](#mnemonic-xpub-search-address-of-xpub-network) — network selector (default `mainnet`)
 - [`--json`](#mnemonic-xpub-search-address-of-xpub-json) — emit JSON envelope instead of text
 
 ## `--xpub` {#mnemonic-xpub-search-address-of-xpub-xpub}
@@ -106,10 +106,9 @@ Taproot P2TR (key-path). Address prefix `bc1p` on mainnet.
 
 ## `--network` {#mnemonic-xpub-search-address-of-xpub-network}
 
-The Bitcoin network selector. Optional; default inferred from the
-xpub version byte. `--network signet` / `--network regtest` overrides
-the test/signet/regtest ambiguity the version byte collapses. The GUI
-renders this as a Dropdown widget.
+The Bitcoin network selector. Optional; defaults to `mainnet`, and an
+xpub (or target address) of another class is refused (exit 8) before
+any search. The GUI renders this as a Dropdown widget.
 
 ### Outline {#mnemonic-xpub-search-address-of-xpub-network-outline}
 
@@ -122,10 +121,8 @@ renders this as a Dropdown widget.
 ### `(none)` {#mnemonic-xpub-search-address-of-xpub-network-}
 
 The empty-string unset entry, and the dropdown's default: no
-`--network` is emitted, so the CLI infers the network from the xpub's
-version byte (mainnet for `xpub`/`ypub`/`zpub`…, testnet for
-`tpub`/`upub`/`vpub`…). Pick `signet` or `regtest` explicitly when the
-test-network ambiguity matters.
+`--network` is emitted, so the run is on mainnet. A `tpub`/`upub`/`vpub`
+xpub then needs `testnet`, `signet` or `regtest` picked explicitly.
 
 ### `mainnet` {#mnemonic-xpub-search-address-of-xpub-network-mainnet}
 

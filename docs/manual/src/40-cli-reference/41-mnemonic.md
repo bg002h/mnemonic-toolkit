@@ -389,8 +389,9 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
 | `--threshold <THRESHOLD>` | multisig K of N (1 ≤ K ≤ N ≤ 16) |
 | `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) takes a 48- or 96-digit SeedQR string and decodes inline at slot-emit time, materializing the BIP-39 phrase identically to a `@N.phrase=` invocation. `ms1` (v0.41.0+) takes a raw BIP-93 codex32 secret string and decodes it inline, materializing the slot's entropy identically to a `@N.entropy=` invocation; it is **language-preserving** — a `mnem`-kind ms1 carries its BIP-39 wordlist language on the wire, so the emitted card round-trips that language without re-specifying `--language`. Supplying `--language` whose wordlist disagrees with the slot's wire language is refused (`SlotInputViolation` `kind:"language-conflict"`, exit 2); omit `--language` or set it to match. A K-of-N codex32 **share** (not a single-string secret) is rejected with a pointer to `ms-shares combine` — reassemble the secret first, then slot the combined `ms1`. The share at index `s` is the secret itself, not a distributed share, and `ms-shares combine` does not take it, so it is rejected (exit 2) without that pointer. |
-| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--threshold` is ignored: K comes from the envelope's descriptor; `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
+| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--threshold` is ignored: K comes from the envelope's descriptor; `--network` must equal the envelope's `bundle.network`: a disagreement is refused (exit 8, `error: network mismatch: <file> says network <net>, but --network is <run>. ...`), as is an envelope whose stated network contradicts its own keys, and an origin coin type that disagrees with its key unless `--accept-coin-type-mismatch` is given. The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
 | `--import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array (e.g., Bitcoin Core `listdescriptors` with multiple descriptors); required when the envelope has > 1 entry; out-of-range is `BadInput` exit 2 |
+| `--accept-coin-type-mismatch` | go on when an origin path's coin type (`0h` or `1h`) disagrees with its key or the network: the output is for the run's network, every path is kept as written, and a warning (`warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: ...`) is printed each time. Without it the run is refused (exit 8). It never passes a key, address or file of the other network |
 | `--help` | print help |
 
 ### Worked example
@@ -933,6 +934,7 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--mk1 <STRING>` | repeating; one mk1 card |
 | `--md1 <STRING>` | repeating; one md1 card |
 | `--json` | JSON output |
+| `--accept-coin-type-mismatch` | go on when an origin path's coin type (`0h` or `1h`) disagrees with its key or the network: the output is for the run's network, every path is kept as written, and a warning (`warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: ...`) is printed each time. Without it the run is refused (exit 8). It never passes a key, address or file of the other network |
 | `--help` | print help |
 
 ### Non-representable use-site steps
@@ -1136,7 +1138,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 |---|---|
 | `--from <FROM>` | source node (`phrase=…`, `seedqr=…`, `entropy=…`, `xpub=…`, `xprv=…`, `wif=…`, `ms1=…`, `mk1=…`, `bip38=…`, `minikey=…`, `electrum-phrase=…`); `=-` reads from stdin. `seedqr=<digits>` (v0.31.6+) decodes a 48/60/72/84/96-digit SeedQR string to a BIP-39 phrase then projects to any phrase-reachable target |
 | `--to <TO>` | target node; repeating for multi-output. `seedqr` is NOT a valid target (input-only); use `mnemonic seedqr encode` to emit a SeedQR digit-string |
-| `--network <NETWORK>` | mainnet / testnet / signet / regtest. For `(Xpub, Address)` derivation, an explicit `--network` disagreeing with the xpub's own version bytes is refused fail-closed (exit 2) rather than rendering a wrong-network address; omit `--network` to infer it from the xpub instead |
+| `--network <NETWORK>` | mainnet / testnet / signet / regtest; default mainnet. Every `--to` is computed for this network: a key, xprv, mk1 card or WIF of the other network is refused (exit 8), and a `--path` coin type (`0h`/`1h`) that disagrees with it is refused unless `--accept-coin-type-mismatch` is given. Nothing is inferred from an xpub |
 | `--template <TEMPLATE>` | as for `bundle` |
 | `--path <PATH>` | BIP-32 path from the master key, literal `m/...` only. For `--to xpub`/`--to xprv` it overrides the `--template`/`--account` path (and makes `--template` optional); required for `--to wif`, `--to address` from a seed, and composite `--to bip38`. Does not change `--to fingerprint` (always the master fingerprint). Refused (exit 2) with a non-zero `--account`, or when no requested target uses it |
 | `--account <ACCOUNT>` | account index (default 0); read only by `--to xpub` / `--to xprv` from a `phrase=`, `seedqr=` or `entropy=` source without `--path`. Refused (exit 2) when non-zero together with `--path`, or when non-zero and no requested target reads it |
@@ -1153,6 +1155,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--json` | JSON output |
 | `--group-size <N>` | insert a separator every N characters in an emitted ms1 or mk1 card (default `0` = unbroken). Display only; `--json` and non-card outputs (xpub, WIF, …) stay unbroken |
 | `--separator <SEPARATOR>` | the grouping separator: `space` (keyword, the default) or the literal `" "`. Whitespace only — `hyphen` and `comma` are refused |
+| `--accept-coin-type-mismatch` | go on when an origin path's coin type (`0h` or `1h`) disagrees with its key or the network: the output is for the run's network, every path is kept as written, and a warning (`warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: ...`) is printed each time. Without it the run is refused (exit 8). It never passes a key, address or file of the other network |
 | `--help` | print help |
 
 ### Worked example
@@ -1192,7 +1195,7 @@ mnemonic export-wallet [OPTIONS]
 | `--descriptor <DESCRIPTOR>` | accepts a concrete descriptor (with or without key origins); **(v0.49.0) also a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`), expanded to the concrete descriptor — the inverse of `--format bip388`; a keyless `@N` template is rejected with a pointer to `--template … --slot …` or `--from-import-json` |
 | `--threshold <THRESHOLD>` | multisig threshold |
 | `--multisig-path-family <FAMILY>` | bip48 or bip87 |
-| `--network <NETWORK>` | default mainnet. Every resolved `--slot` xpub (and `@N.master_xpub=`) must agree with `--network`'s version-byte family, and a concrete `--descriptor`'s extended keys must agree with it for `--format bsms` 4-line's first-address line — a disagreement (including against the clap default, with no explicit flag) is refused fail-closed (exit 2) rather than re-emitting a wrong-network xpub / minting a wrong-network address |
+| `--network <NETWORK>` | default mainnet. Every `--slot` xpub (and `@N.master_xpub=`), every `--descriptor` key and the `--from-import-json` envelope must be of this network, on every `--format`; a contradiction is refused (exit 8, nothing written). An origin coin type that disagrees is refused unless `--accept-coin-type-mismatch` is given |
 | `--language <LANGUAGE>` | ignored (watch-only); accepted for slot-parser symmetry |
 | `--account <ACCOUNT>` | account index (default 0) |
 | `--slot <SLOT>` | repeating `@N.<subkey>=<value>`; subkeys: `phrase`, `seedqr`, `entropy`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv` (secret-bearing subkeys, including `seedqr`, are refused by `export-wallet`'s watch-only validator per SPEC §3) |
@@ -1208,6 +1211,7 @@ mnemonic export-wallet [OPTIONS]
 | `--from-import-json <FILE\|->` | (v0.27.0) emit a per-format wallet config from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` becomes the canonical descriptor, cosigner xpubs decode from `bundle.mk1` per SPEC §3.6.1, network derives from `bundle.network`; mutually exclusive with `--template` and `--descriptor`; `--account` is rejected (envelope's `bundle.account` is authoritative). **(v0.37.0)** for template-requiring file-import formats (`sparrow`/`coldcard`/`jade`/`electrum`) the `--template` is **auto-derived from the envelope descriptor** (so these now round-trip via `--from-import-json`); you still cannot pass `--template` explicitly here (it remains mutually exclusive) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
 | `--from-import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array; required when the envelope has > 1 entry |
 | `--allow <RULE>` | reviewed opt-out of ONE funds-safety sanity rule per occurrence (repeatable): `malleable`, `mixed-timelock`, `repeated-keys`, `resource-limit`, `sigless-branch` — the same vocabulary as `build-descriptor`. On THIS surface only `sigless-branch` is ENFORCED; the other four never run and say so. Never silent — see "Reviewed sanity opt-out" below |
+| `--accept-coin-type-mismatch` | go on when an origin path's coin type (`0h` or `1h`) disagrees with its key or the network: the output is for the run's network, every path is kept as written, and a warning (`warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: ...`) is printed each time. Without it the run is refused (exit 8). It never passes a key, address or file of the other network |
 | `--help` | print help |
 
 ### Reviewed sanity opt-out (`--allow`)
@@ -1378,7 +1382,7 @@ channels that keep the seed off the argv.
 | `--language <LANGUAGE>` | BIP-39 wordlist for `phrase=` / `seedqr=` (default `english`); one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish`. A `mnem`-kind ms1 carries its own wire language; a conflicting `--language` is refused |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest` |
 | `--account <ACCOUNT>` | BIP-32 account index(es) (default 0). Single-sig restore + single-sig template completion: one account (the first value). **(#28 phase 2) MULTISIG template completion**: the comma-separated LIST of accounts the OWN seed is used at — one own key per account (e.g. `--account 0,1,2,3` for a 4-own-slot policy); the search places each own-derived key. See [Multisig template completion](#multisig-template-completion) |
-| `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for completing a **keyless single-sig template** `md1` (`bundle --md1-form=template`); overrides the template's canonical `m/<purpose>'/<coin>'/<account>'` default. Only meaningful for keyless single-sig template restore; ignored otherwise. See [Template-only md1](#template-only-md1) |
+| `--origin <ORIGIN>` | explicit BIP-32 origin path of the account key (e.g. `m/84'/0'/7'`), overriding the template's canonical `m/<purpose>'/<coin>'/<account>'`. Single-sig restore (no `--md1`) derives at it, requires one `--template` and refuses a typed `--account` (exit 2); single-sig template completion (`--md1 <keyless-template>`, see [Template-only md1](#template-only-md1)) and multisig template completion take it as the own key's origin. Its coin type (`0h`/`1h`) must agree with `--network` unless `--accept-coin-type-mismatch` is given (exit 8) |
 | `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for template-completion (single-sig phase 1 **and** multisig phase 2 id-search). Restore recomputes the id from the completed, fully-keyed wallet and matches its leading bytes; a **mismatch refuses loudly** (exit 4). Any-length prefix (an advisory warns when shorter than 4 bytes — a collision footgun — but does not enforce it; the convenience prefix the `bundle` advisory prints is 4 bytes). For multisig the prefix must be **strong** (sized to the realized search space) or the search refuses an ambiguous match. **NOT** checked when `--origin` is supplied (a different preimage). See [Template-only md1](#template-only-md1) and [Multisig template completion](#multisig-template-completion) |
 | `--own-account-max <OWN_ACCOUNT_MAX>` | (v0.70.0; #28 phase 2) RANGE fallback for the OWN seed's account(s) when the exact accounts are unknown: derive the own seed at **every** account in `0..K` and let the multisig-template **own-account subset-search** select the subset actually used. Own-only — the supplied `--cosigner` cards must be EXACT (over-supply cosigners with `--search-cosigner-subset`). Mutually exclusive with `--account` (clap `conflicts_with` — `--own-account-max K` ALONE passes; the `--account` default is ignored). `K ≤ 256`. The realized search space sizes the strong-prefix requirement, so a LONGER `--expect-wallet-id` prefix (or `--search-address`) is needed than for the exact-account path. See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
 | `--search-cosigner-subset` | (v0.70.0; #28 phase 2) **OPT-IN bounded cosigner-subset search.** By default (OFF) a multisig template completion requires the supplied `--cosigner` cards to be EXACT (own-only — over-supplying cosigners refuses). With this flag the operator MAY over-supply `--cosigner` cards (unsure which/how many cosigners belong); the search resolves the correct cosigner subset too. The space grows to `S_opt = Σ_j C(K_own,j)·C(M_sup,N−j)·N!`, so a LONGER `--expect-wallet-id` prefix is needed (a too-short prefix refuses; `--search-address` is the recommended collision-free mode for large opt-in pools). Bounded by the §6 hard ceiling (`S_opt ≤ 1e15`) + the adaptive time-cap. Mutually exclusive with `--cosigner @N=` (explicit placement). Composes with `--own-account-max` / `--account`. See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
@@ -1397,6 +1401,7 @@ channels that keep the seed off the argv.
 | `--json` | emit a single structured JSON object on stdout instead of the text document; seed material is NEVER echoed (redacted by construction). `import_payload` is present only when `--format` is also set |
 | `--output <OUTPUT>` | write the stdout content to `<FILE>` (`-`, the default, → stdout); the verification block / banners / advisory still go to stderr |
 | `--no-auto-repair` | (global) skip auto-fire repair on decode failures; same global flag honored by `convert` / `inspect` / `verify-bundle` |
+| `--accept-coin-type-mismatch` | go on when an origin path's coin type (`0h` or `1h`) disagrees with its key or the network: the output is for the run's network, every path is kept as written, and a warning (`warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: ...`) is printed each time. Without it the run is refused (exit 8). It never passes a key, address or file of the other network |
 | `--help` | print help |
 
 ### Verification policy
@@ -1724,7 +1729,8 @@ mnemonic import-wallet --blob <FILE|-> [OPTIONS]
 | `--decrypt-password <VALUE>` | (v0.33.2) password for an Electrum **BIE1** (user-password) storage-encrypted wallet file. A storage-encrypted Electrum wallet is a single base64 blob (decoded magic `BIE1`), NOT JSON; the toolkit auto-detects it and decrypts it to the wallet JSON (ECIES: PBKDF2-HMAC-SHA512 → secp256k1 key → AES-128-CBC + HMAC-SHA256 + zlib) BEFORE sniff/parse, then imports watch-only as usual. Only consumed when a `BIE1` blob is detected; ignored (with a stderr notice) otherwise. `-` reads it from stdin and `@env:VAR` from the environment (the `--passphrase` rule); any other inline value emits the argv-leakage advisory. Wrong password → `decryption failed (wrong password or corrupted wallet file)`. Mutually exclusive with the other two `--decrypt-password*` forms. |
 | `--decrypt-password-file <PATH>` | (v0.33.2) read the BIE1 decryption password from a file (one trailing newline stripped). |
 | `--decrypt-password-stdin` | (v0.33.2) read the BIE1 decryption password from stdin (NULL-byte preserving). Cannot co-exist with any other stdin consumer (`--blob=-`, `--bsms-encryption-token=-`). |
-| `--network <mainnet\|testnet\|signet\|regtest>` | (v0.34.6) re-bind the imported network to disambiguate **signet/regtest** from the coin-type-1→testnet collapse (BIP-129 BSMS + Bitcoin Core `listdescriptors` use coin-type `1` for testnet/signet/regtest alike, so the network is collapsed to testnet by default). Honored ONLY within the parsed coin-type class (testnet ↔ {testnet, signet, regtest}; mainnet ↔ mainnet) — a cross-class request (e.g. `--network mainnet` on a testnet-coin-type blob) is refused (exit 1, `ImportWalletNetworkClassMismatch`) because the blob's xpub prefix is coin-type-bound. Absent = use the coin-type-derived network. Note: signet shares testnet's address params (`tb1…`), so `testnet→signet` changes only the network label; `testnet→regtest` changes the HRP to `bcrt1…`. |
+| `--network <mainnet\|testnet\|signet\|regtest>` | the network of the imported wallet; default mainnet (nothing is inferred from the blob). Every key of the blob, and a Coldcard file's stated `chain`, must be of this network: a test blob without `--network` (or with `--network mainnet`) is refused (exit 8, nothing written), so import a testnet, signet or regtest export with that `--network`. A file whose stated network contradicts its own keys is refused whatever `--network` says. An origin coin type that disagrees with its key is refused unless `--accept-coin-type-mismatch` is given. Note: signet shares testnet's address params (`tb1…`); regtest uses `bcrt1…`. |
+| `--accept-coin-type-mismatch` | go on when an origin path's coin type (`0h` or `1h`) disagrees with its key or the network: the output is for the run's network, every path is kept as written, and a warning (`warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: ...`) is printed each time. Without it the run is refused (exit 8). It never passes a key, address or file of the other network |
 | `--help` | print help |
 
 ### Description
@@ -1778,6 +1784,7 @@ auto-rewriting).
 | `3` | future-format refusal (e.g., `BSMS 2.0`) — via existing `FutureFormat` From-impl |
 | `4` | `ImportWalletSeedMismatch` — supplied seed does not match blob's declared xpub at the cosigner's origin path; OR (v0.85.0) `--bsms-round1` lenient-default mode with any record's `signature_verified: false` (standalone OR combined with `--blob`) — report/envelope still printed |
 | `5` | repair short-circuit — BCH-correctable BSMS descriptor `mk1` chunk; see [auto-fire on decode failure](#auto-fire-on-decode-failure-v0221) |
+| `8` | network mismatch: a source of one network contradicts the run's network or another source (SPEC_network_rule); nothing was written |
 
 ### Stderr templates
 
@@ -3039,7 +3046,7 @@ mnemonic nostr (--pubkey <PUBKEY> | --secret <SECRET> | --secret-file <FILE> | -
 | `--secret-stdin` | Read the secret key from stdin (avoids argv exposure) |
 | `--script-type <SCRIPT_TYPE>` | Address/descriptor script type: `p2pkh` / `p2wpkh` / `p2sh-p2wpkh` / `p2tr`. Defaults to `p2tr` when neither this nor `--all-script-types` is given |
 | `--all-script-types` | Emit descriptor + address for all four script types (`p2tr`, `p2wpkh`, `p2sh-p2wpkh`, `p2pkh`) |
-| `--network <NETWORK>` | Bitcoin network — affects address HRP and WIF version byte. One of `mainnet` / `testnet` / `signet` / `regtest` (default `mainnet`) |
+| `--network <NETWORK>` | Bitcoin network — affects address HRP and WIF version byte. One of `mainnet` / `testnet` / `signet` / `regtest` (default `mainnet`). A nostr key names no network, so after the output-class advisory the run says which network it used: with no `--network`, `warning: nothing here names a network and no --network was given: read as mainnet. ...`; with a test `--network`, `warning: this run is on <net>, a test network, because --network says so; ...` |
 | `--json` | Emit JSON instead of the human-readable block |
 | `--import <IMPORT>` | Append a ready-to-paste Bitcoin Core `importdescriptors` recipe for the derived address(es). `readonly` = watch-only (the pubkey descriptor). `spending` / `both` are reserved for a future cycle (rejected with a "deferred" message) |
 | `--timestamp <TIMESTAMP>` | Bitcoin Core rescan anchor for `--import`: `now` or unix seconds. Default `0` (rescan from genesis to discover an existing key's funds) |
@@ -3224,7 +3231,7 @@ The scan key is derived at `m/352'/<coin>'/<account>'/1'/0` and the spend key at
 | `--secret-stdin` | read the seed-bearing secret from stdin |
 | `--passphrase <P>` | BIP-39 mnemonic-extension passphrase ("25th word"). Applies to phrase / ms1 / entropy-hex inputs; **ignored (with a warning) for an xprv input** (the xprv is already the master). SECRET: leaks via argv; prefer `--passphrase -` / `--passphrase-stdin` (stdin) or `--passphrase @env:VAR` |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (whitespace-preserving — significant PBKDF2 salt). Mutually exclusive with `--passphrase`, and with `--secret-stdin` (one stdin per invocation) |
-| `--network <mainnet\|testnet\|signet\|regtest>` | mainnet → `sp` address + coin-type 0; testnet/signet/regtest → `tsp` address + coin-type 1 (default mainnet). For an xprv/tprv `--secret`, `--network` (including the default) must agree with the key's own version bytes — a disagreement is refused fail-closed (exit 2) rather than deriving at the wrong coin-type; phrase/ms1/entropy-hex secrets are network-agnostic (the master mints AT `--network`) and are unaffected |
+| `--network <mainnet\|testnet\|signet\|regtest>` | mainnet → `sp` address + coin-type 0; testnet/signet/regtest → `tsp` address + coin-type 1 (default mainnet). An xprv/tprv `--secret` of the other network (including against the default) is refused (exit 8, nothing written); phrase/ms1/entropy-hex secrets mint the master at `--network` |
 | `--account <N>` | BIP-32 account index `m/352'/coin'/<account>'/…` (default 0) |
 | `--label <m>` | emit a labeled address for label m (repeatable); **m≥1**. `--label 0` is refused — m=0 is the reserved BIP-352 change label and must never be published |
 | `--change-address` | also emit the BIP-352 **m=0 change address** — for the wallet's OWN change detection ONLY; **never hand it out as a receiving address** (additive; the base address is still emitted) |
@@ -3267,7 +3274,7 @@ mnemonic addresses --from <SOURCE> --address-type <T> [--account <N>] \
 | `--count <N>` | number of addresses per chain, from index 0 (default 10); conflicts with `--range` |
 | `--range <A,B>` | inclusive index range `A..=B`; conflicts with `--count` |
 | `--chain <receive\|change\|both>` | which chain(s) to list (default `receive`) |
-| `--network <NET>` | `mainnet` \| `testnet` \| `signet` \| `regtest`; defaults to the xpub's version bytes (xpub source) or mainnet (seed source); must agree with an xpub's network kind |
+| `--network <NET>` | `mainnet` \| `testnet` \| `signet` \| `regtest`. Defaults to mainnet; an xpub of another class is refused (exit 8) |
 | `--passphrase <V>` | BIP-39 passphrase (seed sources); `-` reads stdin, `@env:VAR` the environment |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`) |
 | `--language <L>` | BIP-39 wordlist language for `phrase=`/`seedqr=` (default `english`); ignored for `electrum-phrase=` (the Electrum seed is stretched from the raw phrase string, not decoded via a wordlist) |
@@ -4205,6 +4212,7 @@ No-match shape:
 | 0 | Match found |
 | 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure, or an `--ms1` decode failure — since Cycle F an `--ms1` substitution-correction never short-circuits here; the original decode error always surfaces, with a stderr advisory when a candidate correction exists) |
 | 4 | No match in searched set (`ToolkitError::XpubSearchNoMatch`) |
+| 8 | network mismatch: a source of one network contradicts the run's network or another source (SPEC_network_rule); nothing was written |
 | 64 | Clap arg-parse error |
 
 Exit `5` is **not reachable** by this subcommand (Cycle F): the seed's
@@ -4279,6 +4287,7 @@ Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `lite
 | `--min-account` / `--number-of-accounts` / `--max-account` / `--add-path` | candidate-set range (same as `path-of-xpub`; search runs once per cosigner) |
 | `--json` | emit JSON envelope on stdout |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure |
+| `--accept-coin-type-mismatch` | go on when an origin path's coin type (`0h` or `1h`) disagrees with its key or the network: the output is for the run's network, every path is kept as written, and a warning (`warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: ...`) is printed each time. Without it the run is refused (exit 8). It never passes a key, address or file of the other network |
 | `-h, --help` | print help |
 
 #### v0.19.0 silent-default-path inference
@@ -4323,6 +4332,7 @@ searched: 7 templates × 20 accounts × 3 cosigners = 420 paths
 | 0 | At least one cosigner matched |
 | 1 | Bad input (descriptor parse error, toolkit-@N refusal, no-xpub-keys refusal, seed-intake error — since Cycle F an `--ms1` decode failure always surfaces here, with a stderr advisory when a candidate correction exists) |
 | 4 | No cosigner matched (`ToolkitError::XpubSearchNoMatch`) |
+| 8 | network mismatch: a source of one network contradicts the run's network or another source (SPEC_network_rule); nothing was written |
 | 64 | Clap arg-parse error |
 
 Exit `5` is **not reachable** here (Cycle F) — see [ms1
@@ -4366,7 +4376,7 @@ mnemonic xpub-search address-of-xpub \
 | `--gap-limit <N>` | per-chain scan window, indices `0..N`. Default `20` |
 | `--external-only` | restrict scan to the external (receive) chain; skip change chain. Default scans both |
 | `--address-type <TYPE>` | explicit script-type for child-address rendering (`p2pkh` / `p2sh-p2wpkh` / `p2wpkh` / `p2tr`). Required for neutral `xpub`/`tpub`; overrides prefix-inferred type otherwise |
-| `--network <NET>` | network selector: `mainnet` / `testnet` / `signet` / `regtest`. Default inferred from the xpub version byte; `--network signet`/`--network regtest` overrides the test/signet/regtest ambiguity collapsed by the version byte. An explicit `--network` that disagrees with the (possibly mk1-decoded) xpub's own version bytes is refused fail-closed (exit 2) rather than scanning wrong-network addresses; omit `--network` to infer it instead |
+| `--network <NET>` | network selector: `mainnet` / `testnet` / `signet` / `regtest`. Defaults to mainnet; an xpub of another class is refused. The (possibly mk1-decoded) `--xpub` and every `--target-address` must be of this network, or the run is refused (exit 8) before any search |
 | `--json` | emit JSON envelope on stdout instead of text-form report |
 | `-h, --help` | print help |
 
@@ -4442,6 +4452,7 @@ No-match entry (single target):
 | 0 | All targets matched |
 | 1 | Bad input (xpub parse failure, address parse failure, multisig SLIP-0132 prefix, missing `--address-type` for neutral xpub) |
 | 4 | At least one target unmatched (`ToolkitError::XpubSearchNoMatch` with `mode: "address-of-xpub"`) |
+| 8 | network mismatch: a source of one network contradicts the run's network or another source (SPEC_network_rule); nothing was written |
 | 64 | Clap arg-parse error |
 
 P3 takes no secret material; auto-fire BCH repair (exit 5) does not apply.
@@ -4612,6 +4623,7 @@ path, so that envelope is byte-unchanged:
 | 0 | Match found (this passphrase produces the target xpub at one of the searched paths) |
 | 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure, or an `--ms1` decode failure — since Cycle F an `--ms1` substitution-correction never short-circuits here; the original decode error always surfaces, with a stderr advisory when a candidate correction exists) |
 | 4 | No match — single passphrase (`XpubSearchNoMatch`), OR no candidate in `--passphrase-candidates-file` produced the target (`XpubSearchPassphraseCandidatesExhausted`, with the count of candidates tried; an all-blank/empty file gets a tailored "no candidates" note) |
+| 8 | network mismatch: a source of one network contradicts the run's network or another source (SPEC_network_rule); nothing was written |
 | 64 | Clap arg-parse error (missing/duplicate passphrase source — exactly one of `--passphrase` / `--passphrase-stdin` / `--passphrase-candidates-file`) |
 
 Exit `5` is **not reachable** by this subcommand (Cycle F) — see [ms1
@@ -4923,7 +4935,7 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | Flag | Purpose |
 |---|---|
 | `--spec <SPEC>` | the JSON node-tree spec — a file path, or `-` for stdin. If omitted, stdin is read when it is not a TTY |
-| `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest`. Used only for the human-view first-receive-address rendering; the descriptor / bip388 / cost output is network-agnostic (the xpubs carry the network) |
+| `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest`. Target network: every key's version and origin coin type is checked against it (a contradiction is refused, exit 8), and the human-view first receive address is shown for it |
 | `--format <FORMAT>` | emit a single bare artifact instead of the rich human view: `descriptor` = the concrete `wsh(M)#checksum`; `bip388` = the BIP-388 wallet-policy JSON. Omit `--format` for the human view (descriptor + first receive address + cost table). Overridden by `--json` |
 | `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object; `bip388` is `null` when BIP-388 cannot express the policy, e.g. an allowed `repeated-keys` policy). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2. In preset mode each diagnostic may additionally carry `flag` — the CLI flag it traces back to (absent when no single flag is responsible, e.g. a duplicate key across two branches) |
 | `--spec-schema` | dump the versioned node-tree grammar JSON (the schema the GUI + presets consume) and exit; ignores all other inputs. Since v0.51.0 it also carries an `archetypes` section: per-preset parameter field-specs (`flag`, `kind`, `required`, `repeatable`, `min`), generated from the registry |
@@ -4937,9 +4949,10 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | `--recovery-older <RECOVERY_OLDER>` | `decaying-multisig` tier-2 relative timelock in blocks, `1..=65535`; must be **greater than** `--older` (tiers must unlock progressively later) |
 | `--after <AFTER>` | `decaying-multisig` tier-3 absolute locktime (block height, or unix time past the BIP-65 threshold) |
 | `--hash <HASH>` | SHA-256 digest (64 hex chars) for `hashlock-gated` |
-| `--emit-spec` | print the lowered + gate-validated node-tree spec JSON instead of building — review it, edit it, feed it back via `--spec`. Conflicts with `--format` / `--json`; `--network` is accepted and ignored. The gate still runs: an invalid preset emits diagnostics, never a spec |
+| `--emit-spec` | print the lowered + gate-validated node-tree spec JSON instead of building — review it, edit it, feed it back via `--spec`. Conflicts with `--format` / `--json`; `--network` is accepted and checked against the keys. The gate still runs: an invalid preset emits diagnostics, never a spec |
 | `--allow <ALLOW>` | reviewed opt-out of ONE funds-safety sanity rule per occurrence (repeatable): `malleable`, `mixed-timelock`, `repeated-keys`, `resource-limit`, `sigless-branch`. Never silent — see "Reviewed sanity opt-out" below |
 | `--no-auto-repair` | (global) no-op for this subcommand (there is no card decode to repair); accepted for global-flag uniformity |
+| `--accept-coin-type-mismatch` | go on when an origin path's coin type (`0h` or `1h`) disagrees with its key or the network: the output is for the run's network, every path is kept as written, and a warning (`warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: ...`) is printed each time. Without it the run is refused (exit 8). It never passes a key, address or file of the other network |
 | `--help` | print help |
 
 ### The validation gate
@@ -5041,6 +5054,7 @@ bip388` reproduces `build-descriptor --format bip388`.
 | success | `0` |
 | spec parse / IO error (bad JSON, unknown field, unsupported `schema_version`) | `2` |
 | validation-gate failure (field / type / sanity / over-envelope / secret-key) | `2` |
+| network mismatch: a source of one network contradicts the run's network or another source (SPEC_network_rule); nothing was written | `8` |
 
 ## `mnemonic gen-man` (v0.73.0) {#mnemonic-gen-man}
 

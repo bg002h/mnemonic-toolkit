@@ -89,9 +89,9 @@ Which chain(s) to list — `receive` / `change` / `both`. Default
 
 ## `--network` {#mnemonic-addresses-network}
 
-The Bitcoin network selector. Defaults to the xpub's version bytes
-(xpub source) or `mainnet` (seed source); it must agree with an
-xpub's network kind. The GUI renders this as a Dropdown widget.
+The Bitcoin network selector. Defaults to `mainnet`; an xpub of
+another class is refused (exit 8). The GUI renders this as a Dropdown
+widget.
 
 ### Outline {#mnemonic-addresses-network-outline}
 

@@ -1,1 +1,2 @@
 note: stdout is watch-only — public keys only, cannot spend
+warning: nothing here names a network and no --network was given: read as mainnet. For a signet, testnet or regtest wallet, rerun with --network signet, --network testnet or --network regtest.
